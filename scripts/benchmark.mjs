@@ -226,7 +226,8 @@ function mismatchBenchmarkConfig(presetId) {
 }
 
 const mismatchStateOnly = runSimulation('HYBRID_SAFE', mismatchBenchmarkConfig('model-mismatch'));
-const mismatchDisturbanceObserver = runSimulation('HYBRID_SAFE', mismatchBenchmarkConfig('mismatch-observer'));
+const mismatchObserverConfig = mismatchBenchmarkConfig('mismatch-observer');
+const mismatchDisturbanceObserver = runSimulation('HYBRID_SAFE', mismatchObserverConfig);
 
 console.log('\nModel-mismatch estimator benchmark');
 console.table([
@@ -261,3 +262,50 @@ console.table([
 ]);
 console.log(`Observer/state-only IAE ratio: ${(mismatchDisturbanceObserver.metrics.iae / mismatchStateOnly.metrics.iae).toFixed(3)}`);
 console.log(`Observer/state-only solve ratio: ${(mismatchDisturbanceObserver.metrics.solveCount / Math.max(1, mismatchStateOnly.metrics.solveCount)).toFixed(3)}`);
+
+const mismatchPredictionMonitor = runSimulation('HYBRID_SAFE', {
+  ...mismatchObserverConfig,
+  estimation: {
+    ...mismatchObserverConfig.estimation,
+    disturbancePredictionEnabled: true,
+  },
+});
+
+function predictionStats(result) {
+  const errors = result.samples.map((sample) => sample.predictionError).filter(Number.isFinite);
+  const predictionTriggers = result.samples.filter((sample) => sample.triggered && sample.triggerReason === 'prediction-error').length;
+  return {
+    avgError: errors.length ? errors.reduce((sum, value) => sum + value, 0) / errors.length : 0,
+    maxError: errors.length ? Math.max(...errors) : 0,
+    predictionTriggers,
+  };
+}
+
+const monitorOffStats = predictionStats(mismatchDisturbanceObserver);
+const monitorOnStats = predictionStats(mismatchPredictionMonitor);
+console.log('\nDisturbance-aware Event Monitor benchmark');
+console.table([
+  {
+    monitor: 'd-hat OFF',
+    IAE: mismatchDisturbanceObserver.metrics.iae.toFixed(4),
+    solves: mismatchDisturbanceObserver.metrics.solveCount,
+    'prediction triggers': monitorOffStats.predictionTriggers,
+    'avg pred err': monitorOffStats.avgError.toFixed(4),
+    'max pred err': monitorOffStats.maxError.toFixed(4),
+    'conv %': mismatchDisturbanceObserver.metrics.convergenceRate == null ? 'n/a' : mismatchDisturbanceObserver.metrics.convergenceRate.toFixed(1),
+    fallback: mismatchDisturbanceObserver.metrics.fallbackCount,
+    'plant safety': mismatchDisturbanceObserver.metrics.maxActualSafetyViolation.toExponential(2),
+  },
+  {
+    monitor: 'd-hat ON',
+    IAE: mismatchPredictionMonitor.metrics.iae.toFixed(4),
+    solves: mismatchPredictionMonitor.metrics.solveCount,
+    'prediction triggers': monitorOnStats.predictionTriggers,
+    'avg pred err': monitorOnStats.avgError.toFixed(4),
+    'max pred err': monitorOnStats.maxError.toFixed(4),
+    'conv %': mismatchPredictionMonitor.metrics.convergenceRate == null ? 'n/a' : mismatchPredictionMonitor.metrics.convergenceRate.toFixed(1),
+    fallback: mismatchPredictionMonitor.metrics.fallbackCount,
+    'plant safety': mismatchPredictionMonitor.metrics.maxActualSafetyViolation.toExponential(2),
+  },
+]);
+console.log(`Prediction-monitor solve ratio ON/OFF: ${(mismatchPredictionMonitor.metrics.solveCount / Math.max(1, mismatchDisturbanceObserver.metrics.solveCount)).toFixed(3)}`);
