@@ -97,20 +97,20 @@ export default function App() {
           <a><Cpu size={18}/>Compute Profiler</a>
           <a><TimerReset size={18}/>Experiments</a>
         </nav>
-        <div className="sidebar-note"><b>V0.2 Predictive Core</b><span>State-space · sequence MPC · disturbance · event-trigger profiler</span></div>
+        <div className="sidebar-note"><b>V0.2 Predictive Core</b><span>State-space · sequence MPC · predictive reference shaping · event-trigger profiler</span></div>
       </aside>
 
       <main>
         <header>
-          <div><p className="eyebrow">ADVANCED CONTROL WORKBENCH</p><h1>Predict only when prediction is worth the cost.</h1><p className="subtitle">Plant chạy ở state-space. MPC tối ưu một chuỗi điều khiển; PID giữ vòng phản xạ nhanh; Event Trigger quyết định thời điểm cần tái tối ưu.</p></div>
+          <div><p className="eyebrow">ADVANCED CONTROL WORKBENCH</p><h1>Predict only when prediction is worth the cost.</h1><p className="subtitle">MPC dự đoán sai số tương lai và tạo setpoint dẫn trước có giới hạn; PID giữ vòng phản xạ nhanh. Event Trigger chỉ gọi lại optimizer khi trạng thái thực sự đáng để tái dự đoán.</p></div>
           <button className="run"><Play size={17} fill="currentColor"/>Deterministic simulation</button>
         </header>
 
         <section className="kpi-grid">
-          <div className="kpi"><span>Architecture</span><strong>MPC → Event → PID</strong><small>supervisory predictive control</small></div>
+          <div className="kpi"><span>Architecture</span><strong>MPC predictor → PID</strong><small>event-triggered predictive guidance</small></div>
           <div className="kpi"><span>Hybrid MPC solves</span><strong>{hybrid.metrics.solveCount}</strong><small>{hybrid.metrics.triggerRate.toFixed(1)} solves/s average</small></div>
           <div className="kpi"><span>Compute avoided</span><strong>{hybrid.metrics.computeReduction.toFixed(1)}%</strong><small>vs solving MPC every sample</small></div>
-          <div className="kpi"><span>Average solve</span><strong>{hybrid.metrics.avgSolveMs.toFixed(3)} ms</strong><small>browser-side optimizer</small></div>
+          <div className="kpi"><span>Average solve</span><strong>{hybrid.metrics.avgSolveMs.toFixed(3)} ms</strong><small>projected-gradient optimizer</small></div>
         </section>
 
         <section className="workspace">
@@ -130,7 +130,8 @@ export default function App() {
             <div className="panel-head"><div><span className="section-tag">TUNING</span><h2>Experiment parameters</h2></div><SlidersHorizontal size={19}/></div>
             <div className="control-group"><h3>System</h3><NumberField label="Setpoint" value={cfg.setpoint} onChange={(v) => update(null, 'setpoint', v)}/><NumberField label="Sample time (s)" value={cfg.dt} step={0.005} onChange={(v) => update(null, 'dt', Math.max(0.005, v))}/></div>
             <div className="control-group"><h3>PID fast loop</h3><NumberField label="Kp" value={cfg.pid.kp} onChange={(v) => update('pid', 'kp', v)}/><NumberField label="Ki" value={cfg.pid.ki} onChange={(v) => update('pid', 'ki', v)}/><NumberField label="Kd" value={cfg.pid.kd} onChange={(v) => update('pid', 'kd', v)}/></div>
-            <div className="control-group"><h3>Predictive MPC</h3><NumberField label="Horizon" value={cfg.mpc.horizon} step={1} onChange={(v) => update('mpc', 'horizon', Math.max(3, Math.round(v)))}/><NumberField label="Q position" value={cfg.mpc.qPosition} onChange={(v) => update('mpc', 'qPosition', Math.max(0, v))}/><NumberField label="Q velocity" value={cfg.mpc.qVelocity} onChange={(v) => update('mpc', 'qVelocity', Math.max(0, v))}/><NumberField label="R input" value={cfg.mpc.rInput} onChange={(v) => update('mpc', 'rInput', Math.max(0, v))}/></div>
+            <div className="control-group"><h3>Predictive MPC</h3><NumberField label="Horizon" value={cfg.mpc.horizon} step={1} onChange={(v) => update('mpc', 'horizon', Math.max(3, Math.round(v)))}/><NumberField label="Q position" value={cfg.mpc.qPosition} onChange={(v) => update('mpc', 'qPosition', Math.max(0, v))}/><NumberField label="Q velocity" value={cfg.mpc.qVelocity} onChange={(v) => update('mpc', 'qVelocity', Math.max(0, v))}/><NumberField label="R input" value={cfg.mpc.rInput} onChange={(v) => update('mpc', 'rInput', Math.max(0, v))}/><NumberField label="Terminal weight" value={cfg.mpc.terminalWeight} step={0.5} onChange={(v) => update('mpc', 'terminalWeight', Math.max(1, v))}/><NumberField label="Solver iterations" value={cfg.mpc.iterations} step={1} onChange={(v) => update('mpc', 'iterations', Math.max(1, Math.round(v)))}/></div>
+            <div className="control-group guidance-controls"><h3>MPC → PID guidance</h3><NumberField label="Reference lead" value={cfg.mpc.referenceLead} step={0.05} onChange={(v) => update('mpc', 'referenceLead', Math.max(0, v))}/><NumberField label="Velocity damping" value={cfg.mpc.velocityDamping} step={0.01} onChange={(v) => update('mpc', 'velocityDamping', Math.max(0, v))}/><NumberField label="Lead clamp" value={cfg.mpc.maxReferenceLead} step={0.05} onChange={(v) => update('mpc', 'maxReferenceLead', Math.max(0, v))}/></div>
             <div className="control-group accent"><h3>Event trigger</h3><NumberField label="Prediction error" value={cfg.trigger.predictionError} step={0.005} onChange={(v) => update('trigger', 'predictionError', Math.max(0.001, v))}/><NumberField label="State change" value={cfg.trigger.stateChange} step={0.01} onChange={(v) => update('trigger', 'stateChange', Math.max(0.001, v))}/><NumberField label="Min interval (s)" value={cfg.trigger.minInterval} step={0.02} onChange={(v) => update('trigger', 'minInterval', Math.max(cfg.dt, v))}/><NumberField label="Watchdog (s)" value={cfg.trigger.maxInterval} step={0.02} onChange={(v) => update('trigger', 'maxInterval', Math.max(cfg.trigger.minInterval, v))}/></div>
             <div className="control-group disturbance-controls"><h3>Disturbance injection</h3><ToggleField label="Enabled" checked={cfg.disturbance.enabled} onChange={(v) => update('disturbance', 'enabled', v)}/><NumberField label="Start (s)" value={cfg.disturbance.start} step={0.1} onChange={(v) => update('disturbance', 'start', Math.max(0, v))}/><NumberField label="Duration (s)" value={cfg.disturbance.duration} step={0.1} onChange={(v) => update('disturbance', 'duration', Math.max(cfg.dt, v))}/><NumberField label="Amplitude" value={cfg.disturbance.amplitude} step={0.1} onChange={(v) => update('disturbance', 'amplitude', v)}/></div>
           </div>
@@ -151,15 +152,15 @@ export default function App() {
             <div className="matrix-block"><span>A</span><pre>{model.A}</pre></div>
             <div className="matrix-block"><span>B</span><pre>{model.B}</pre></div>
             <div className="matrix-block"><span>C</span><pre>{model.C}</pre></div>
-            <p className="model-note">State vector: x = [position, velocity]ᵀ. MPC dự đoán với mô hình danh định; disturbance chỉ đi vào plant thật để kiểm tra khả năng phát hiện sai lệch.</p>
+            <p className="model-note">State vector: x = [position, velocity]ᵀ. MPC dùng model danh định để dự đoán sai số tương lai; lớp guidance biến dự đoán đó thành setpoint dẫn trước có giới hạn cho PID.</p>
           </div>
         </section>
 
         <section className="concept-grid">
           <div className="concept"><span>01</span><h3>Model</h3><p>Plant được rời rạc hóa thành state-space để sau này thay trực tiếp bằng UAV, UGV hoặc USV.</p></div>
-          <div className="concept"><span>02</span><h3>Optimize</h3><p>MPC tối ưu toàn bộ control sequence có giới hạn input, cost trạng thái và Δu.</p></div>
-          <div className="concept"><span>03</span><h3>Trigger</h3><p>Prediction error, state change, actuator constraint và watchdog quyết định thời điểm solve mới.</p></div>
-          <div className="concept"><span>04</span><h3>Profile</h3><p>Đánh giá đồng thời chất lượng điều khiển và chi phí tính toán, thay vì chỉ nhìn đường đáp ứng đẹp.</p></div>
+          <div className="concept"><span>02</span><h3>Optimize</h3><p>Projected-gradient MPC tối ưu control sequence có input bounds, state cost, terminal cost và Δu cost.</p></div>
+          <div className="concept"><span>03</span><h3>Guide</h3><p>MPC không thay PID: nó dự đoán tương lai và tạo reference dẫn trước để PID phản ứng sớm nhưng vẫn bị giới hạn an toàn.</p></div>
+          <div className="concept"><span>04</span><h3>Trigger + Profile</h3><p>Chỉ solve lại khi cần, đồng thời đo chất lượng điều khiển và chi phí tính toán của từng kiến trúc.</p></div>
         </section>
       </main>
     </div>
