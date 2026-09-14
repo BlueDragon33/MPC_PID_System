@@ -51,7 +51,7 @@ function intersectAffineEnvelope(interval, freeValue, coefficient, minimum, maxi
   };
 }
 
-function physicalCommandInterval(previousU, cfg) {
+export function computePhysicalCommandInterval(previousU, cfg) {
   let lower = cfg.mpc.uMin;
   let upper = cfg.mpc.uMax;
   if (Number.isFinite(cfg.mpc.deltaUMin)) lower = Math.max(lower, previousU + cfg.mpc.deltaUMin);
@@ -96,17 +96,29 @@ export function computeAdmissibleCommandInterval(state, previousU, cfg, continua
   const horizon = Math.max(1, Math.round(cfg.safety?.previewHorizon ?? 6));
   const { A, B, C } = createSecondOrderModel(cfg);
   const hasContinuation = Array.isArray(continuationSequence) && continuationSequence.length > 1;
-  let interval = physicalCommandInterval(previousU, cfg);
-  if (!interval.feasible) return { ...interval, horizon, checkedStages: 0, continuationUsed: false };
+  let interval = computePhysicalCommandInterval(previousU, cfg);
+  if (!interval.feasible) {
+    return { ...interval, horizon, checkedStages: 0, continuationUsed: false, baseInterval: { ...interval } };
+  }
 
   if (hasContinuation) {
     interval = intersectFirstMoveWithContinuationRate(interval, continuationSequence, cfg);
-    if (!interval.feasible) return { ...interval, horizon, checkedStages: 0, continuationUsed: true };
+    if (!interval.feasible) {
+      return { ...interval, horizon, checkedStages: 0, continuationUsed: true, baseInterval: { ...interval } };
+    }
   }
+
+  // baseInterval is the admissible command range imposed by actuator limits,
+  // slew-rate limits and MPC-plan reachability before any state/output envelope.
+  // Keeping it separate lets diagnostics distinguish physical/plan conditioning
+  // from true safety-envelope intervention.
+  const baseInterval = { ...interval };
 
   const enforceState = Boolean(cfg.mpc.stateConstraintsEnabled);
   const enforceOutput = Boolean(cfg.mpc.outputConstraintsEnabled);
-  if (!enforceState && !enforceOutput) return { ...interval, horizon, checkedStages: 0, continuationUsed: hasContinuation };
+  if (!enforceState && !enforceOutput) {
+    return { ...interval, horizon, checkedStages: 0, continuationUsed: hasContinuation, baseInterval };
+  }
 
   const positionMargin = Math.max(0, cfg.safety?.positionMargin ?? 0);
   const velocityMargin = Math.max(0, cfg.safety?.velocityMargin ?? 0);
@@ -124,8 +136,8 @@ export function computeAdmissibleCommandInterval(state, previousU, cfg, continua
         free = add2(matVec2(A, free), scale2(B, futureU ?? previousU));
         gain = matVec2(A, gain);
       } else {
-        // No MPC continuation is available. Fall back to the conservative
-        // constant-command preview used by the first governor prototype.
+        // No MPC continuation is available. Fall back to a conservative
+        // constant-command preview.
         free = matVec2(A, free);
         gain = add2(matVec2(A, gain), B);
       }
@@ -141,7 +153,7 @@ export function computeAdmissibleCommandInterval(state, previousU, cfg, continua
         'position',
         stage,
       );
-      if (!interval.feasible) return { ...interval, horizon, checkedStages: stage, continuationUsed: hasContinuation };
+      if (!interval.feasible) return { ...interval, horizon, checkedStages: stage, continuationUsed: hasContinuation, baseInterval };
 
       interval = intersectAffineEnvelope(
         interval,
@@ -152,7 +164,7 @@ export function computeAdmissibleCommandInterval(state, previousU, cfg, continua
         'velocity',
         stage,
       );
-      if (!interval.feasible) return { ...interval, horizon, checkedStages: stage, continuationUsed: hasContinuation };
+      if (!interval.feasible) return { ...interval, horizon, checkedStages: stage, continuationUsed: hasContinuation, baseInterval };
     }
 
     if (enforceOutput) {
@@ -167,16 +179,16 @@ export function computeAdmissibleCommandInterval(state, previousU, cfg, continua
         'output',
         stage,
       );
-      if (!interval.feasible) return { ...interval, horizon, checkedStages: stage, continuationUsed: hasContinuation };
+      if (!interval.feasible) return { ...interval, horizon, checkedStages: stage, continuationUsed: hasContinuation, baseInterval };
     }
   }
 
-  return { ...interval, horizon, checkedStages: horizon, continuationUsed: hasContinuation };
+  return { ...interval, horizon, checkedStages: horizon, continuationUsed: hasContinuation, baseInterval };
 }
 
 export function applySafetyGovernor({ state, proposedU, previousU, lastMpcSafeU, continuationSequence = null, cfg }) {
   const interval = computeAdmissibleCommandInterval(state, previousU, cfg, continuationSequence);
-  const physical = physicalCommandInterval(previousU, cfg);
+  const physical = computePhysicalCommandInterval(previousU, cfg);
 
   if (!interval.feasible) {
     const fallbackCandidate = Number.isFinite(lastMpcSafeU) ? lastMpcSafeU : previousU;
