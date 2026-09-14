@@ -1,4 +1,6 @@
 import { createPIDController } from './controllers/pid.js';
+import { createLinearKalmanFilter } from './estimation/linearKalmanFilter.js';
+import { createMeasurementSensor } from './estimation/measurementSensor.js';
 import { createSecondOrderModel, disturbanceAt, stepSecondOrderPlant } from './models/secondOrderPlant.js';
 import {
   computeAdmissibleCommandInterval,
@@ -53,6 +55,16 @@ export const defaultConfig = {
     velocityMargin: 0,
     outputMargin: 0,
   },
+  estimation: {
+    enabled: false,
+    measurementNoiseStd: 0.08,
+    measurementBias: 0,
+    seed: 20260914,
+    processPositionVariance: 2e-5,
+    processVelocityVariance: 2e-4,
+    initialPositionVariance: 0.25,
+    initialVelocityVariance: 0.8,
+  },
   trigger: {
     predictionError: 0.035,
     stateChange: 0.08,
@@ -67,6 +79,9 @@ export const defaultConfig = {
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const average = (values) => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
+const rms = (values) => values.length
+  ? Math.sqrt(values.reduce((sum, value) => sum + value * value, 0) / values.length)
+  : null;
 
 export function getStateSpaceModel(cfg = defaultConfig) {
   return createSecondOrderModel(cfg);
@@ -137,6 +152,21 @@ function metrics(samples, target, solverRecords, cfg) {
   const governorEmergencyCount = governorSamples.filter((sample) => sample.governorEmergencyFallback).length;
   const governorContinuationCount = governorSamples.filter((sample) => sample.governorContinuationUsed).length;
 
+  const estimationSamples = samples.filter((sample) => sample.estimationEnabled);
+  const measurementErrors = estimationSamples
+    .map((sample) => sample.measurement - sample.measurementTruth)
+    .filter(Number.isFinite);
+  const estimatePositionErrors = estimationSamples
+    .map((sample) => sample.estimateX - sample.x)
+    .filter(Number.isFinite);
+  const estimateVelocityErrors = estimationSamples
+    .map((sample) => sample.estimateV - sample.v)
+    .filter(Number.isFinite);
+  const innovations = estimationSamples.map((sample) => sample.innovation).filter(Number.isFinite);
+  const covarianceTraces = estimationSamples.map((sample) => sample.covarianceTrace).filter(Number.isFinite);
+  const measurementRmse = rms(measurementErrors);
+  const estimatePositionRmse = rms(estimatePositionErrors);
+
   return {
     overshoot: Math.max(0, ((peak - target) / Math.max(Math.abs(target), 1e-9)) * 100),
     settling: settlingTime(samples, target),
@@ -179,6 +209,16 @@ function metrics(samples, target, solverRecords, cfg) {
     governorInfeasibleCount,
     governorEmergencyCount,
     governorContinuationRate: governorSamples.length ? 100 * governorContinuationCount / governorSamples.length : 0,
+    estimationEnabled: estimationSamples.length > 0,
+    measurementRmse,
+    estimatePositionRmse,
+    estimateVelocityRmse: rms(estimateVelocityErrors),
+    innovationRmse: rms(innovations),
+    avgCovarianceTrace: average(covarianceTraces),
+    finalCovarianceTrace: covarianceTraces.length ? covarianceTraces[covarianceTraces.length - 1] : null,
+    estimateToMeasurementRmseRatio: measurementRmse && estimatePositionRmse != null
+      ? estimatePositionRmse / measurementRmse
+      : null,
   };
 }
 
@@ -190,6 +230,7 @@ function mergeConfig(userConfig) {
     pid: { ...defaultConfig.pid, ...(userConfig.pid || {}) },
     mpc: { ...defaultConfig.mpc, ...(userConfig.mpc || {}) },
     safety: { ...defaultConfig.safety, ...(userConfig.safety || {}) },
+    estimation: { ...defaultConfig.estimation, ...(userConfig.estimation || {}) },
     trigger: { ...defaultConfig.trigger, ...(userConfig.trigger || {}) },
     disturbance: { ...defaultConfig.disturbance, ...(userConfig.disturbance || {}) },
   };
@@ -199,9 +240,46 @@ export function runSimulation(mode, userConfig = {}) {
   const cfg = mergeConfig(userConfig);
   const steps = Math.floor(cfg.duration / cfg.dt);
   const pid = createPIDController(cfg.pid, cfg.dt);
+  const model = createSecondOrderModel(cfg);
+  const estimationEnabled = Boolean(cfg.estimation.enabled);
+  const sensor = createMeasurementSensor({
+    C: model.C,
+    noiseStd: estimationEnabled ? cfg.estimation.measurementNoiseStd : 0,
+    seed: cfg.estimation.seed,
+    bias: estimationEnabled ? cfg.estimation.measurementBias : 0,
+  });
+
   let state = { x: 0, v: 0 };
-  let expectedState = { ...state };
-  let lastSolveState = { ...state };
+  let controllerState = { ...state };
+  let measurementSample = sensor.read(state);
+  let estimator = null;
+  let estimatorDiagnostics = null;
+  let covarianceTrace = null;
+
+  if (estimationEnabled) {
+    estimator = createLinearKalmanFilter({
+      A: model.A,
+      B: model.B,
+      C: model.C,
+      processCovariance: [
+        cfg.estimation.processPositionVariance,
+        cfg.estimation.processVelocityVariance,
+      ],
+      measurementVariance: Math.max(1e-12, cfg.estimation.measurementNoiseStd ** 2),
+      initialState: [state.x, state.v],
+      initialCovariance: [
+        cfg.estimation.initialPositionVariance,
+        cfg.estimation.initialVelocityVariance,
+      ],
+    });
+    const initialEstimate = estimator.update(measurementSample.value);
+    controllerState = { x: initialEstimate.x, v: initialEstimate.v };
+    estimatorDiagnostics = initialEstimate.diagnostics;
+    covarianceTrace = estimatorDiagnostics.covarianceTrace;
+  }
+
+  let expectedState = { ...controllerState };
+  let lastSolveState = { ...controllerState };
   let previousU = 0;
   let lastMpcSafeU = 0;
   let lastMpcPlan = null;
@@ -242,7 +320,7 @@ export function runSimulation(mode, userConfig = {}) {
     const event = evaluateEventTrigger({
       k,
       t,
-      state,
+      state: controllerState,
       expectedState,
       lastSolveState,
       previousU,
@@ -263,9 +341,9 @@ export function runSimulation(mode, userConfig = {}) {
     let pidConditioned = null;
 
     if (mode === 'PID') {
-      u = pid.update(cfg.setpoint, state.x);
+      u = pid.update(cfg.setpoint, controllerState.x);
     } else if (mode === 'MPC') {
-      const solution = solveMPC(state, cfg.setpoint, previousU, cfg, warmStart);
+      const solution = solveMPC(controllerState, cfg.setpoint, previousU, cfg, warmStart);
       u = solution.u;
       warmStart = solution.sequence;
       acceptMpcPlan(solution);
@@ -278,14 +356,14 @@ export function runSimulation(mode, userConfig = {}) {
       triggerReason = 'periodic';
     } else if (hybridMode) {
       if (event.triggered) {
-        const solution = solveMPC(state, cfg.setpoint, previousU, cfg, warmStart);
+        const solution = solveMPC(controllerState, cfg.setpoint, previousU, cfg, warmStart);
         warmStart = solution.sequence;
         if (!solution.fallbackUsed) {
           reference = predictiveReference(solution, cfg.setpoint, cfg);
           acceptMpcPlan(solution);
         }
         lastSolve = t;
-        lastSolveState = { ...state };
+        lastSolveState = { ...controllerState };
         mpcCost = solution.cost;
         solverDiagnostics = solution.diagnostics || null;
         solverStatus = solution.status || null;
@@ -296,9 +374,9 @@ export function runSimulation(mode, userConfig = {}) {
       }
 
       if (governorMode) {
-        const interval = computeAdmissibleCommandInterval(state, previousU, cfg, lastMpcPlan);
+        const interval = computeAdmissibleCommandInterval(controllerState, previousU, cfg, lastMpcPlan);
         const baseInterval = interval.baseInterval ?? computePhysicalCommandInterval(previousU, cfg);
-        const pidResult = pid.updateDetailed(reference, state.x, interval.feasible ? interval : null);
+        const pidResult = pid.updateDetailed(reference, controllerState.x, interval.feasible ? interval : null);
         pidRaw = pidResult.raw;
         pidNominal = clamp(pidResult.raw, cfg.pid.uMin, cfg.pid.uMax);
         pidConditioned = baseInterval.feasible
@@ -325,7 +403,7 @@ export function runSimulation(mode, userConfig = {}) {
           };
         } else {
           governor = applySafetyGovernor({
-            state,
+            state: controllerState,
             proposedU: pidConditioned,
             previousU,
             lastMpcSafeU,
@@ -342,7 +420,7 @@ export function runSimulation(mode, userConfig = {}) {
           u = governor.u;
         }
       } else {
-        u = pid.update(reference, state.x);
+        u = pid.update(reference, controllerState.x);
       }
     }
 
@@ -351,9 +429,20 @@ export function runSimulation(mode, userConfig = {}) {
       t,
       x: state.x,
       v: state.v,
+      controllerX: controllerState.x,
+      controllerV: controllerState.v,
       u,
       reference,
       disturbance,
+      measurement: measurementSample.value,
+      measurementTruth: measurementSample.truth,
+      measurementNoise: measurementSample.noise,
+      estimationEnabled,
+      estimateX: estimationEnabled ? controllerState.x : null,
+      estimateV: estimationEnabled ? controllerState.v : null,
+      innovation: estimationEnabled ? estimatorDiagnostics?.innovation ?? null : null,
+      innovationVariance: estimationEnabled ? estimatorDiagnostics?.innovationVariance ?? null : null,
+      covarianceTrace: estimationEnabled ? covarianceTrace : null,
       predictionError: event.predictionError,
       stateChange: event.stateChange,
       constraintRatio: event.constraintRatio,
@@ -388,9 +477,22 @@ export function runSimulation(mode, userConfig = {}) {
         : null,
     });
 
-    expectedState = stepSecondOrderPlant(state, u, 0, cfg);
+    expectedState = stepSecondOrderPlant(controllerState, u, 0, cfg);
     previousU = u;
     state = stepSecondOrderPlant(state, u, disturbance, cfg);
+
+    measurementSample = sensor.read(state);
+    if (estimationEnabled) {
+      const estimate = estimator.step(u, measurementSample.value);
+      controllerState = { x: estimate.x, v: estimate.v };
+      estimatorDiagnostics = estimate.diagnostics;
+      covarianceTrace = estimate.diagnostics.covarianceTrace;
+    } else {
+      controllerState = { ...state };
+      estimatorDiagnostics = null;
+      covarianceTrace = null;
+    }
+
     shiftMpcPlan();
   }
 
@@ -398,7 +500,7 @@ export function runSimulation(mode, userConfig = {}) {
     samples,
     metrics: metrics(samples, cfg.setpoint, solverRecords, cfg),
     config: cfg,
-    model: createSecondOrderModel(cfg),
+    model,
     solverRecords,
   };
 }
