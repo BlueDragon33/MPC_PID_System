@@ -17,16 +17,16 @@ Event Trigger / Scheduler
        ↓
 Predictive reference shaping
        ↓
-Safety Authority / Governor   ← decision gate
-       ↓
 Fast PID / LQR inner loop
+       ↓
+Safety Governor / admissibility filter
        ↓
 Actuator / Plant
        ↓
 Sensors
 ```
 
-MPC là lớp dự đoán và tối ưu. PID là lớp phản xạ nhanh. Event Trigger quyết định **có đáng trả chi phí solve MPC ở thời điểm này hay không**. Safety Authority chỉ được thêm nếu số liệu chứng minh guidance-only không chuyển predicted feasibility thành plant safety đủ tốt.
+MPC là lớp dự đoán và tối ưu. PID là lớp phản xạ nhanh. Event Trigger quyết định **có đáng trả chi phí solve MPC ở thời điểm này hay không**. Safety Governor giữ quyền chấp hành cuối cùng trong miền actuator/plan/safety đã kiểm chứng.
 
 ## Thứ tự phát triển bắt buộc
 
@@ -74,14 +74,14 @@ J_total = w1 * tracking_error
 - actuator-safe fallback semantics,
 - regression test độc lập cho hard inequalities.
 
-### Gate 3C — Predicted state/output safety + reproducible experiments — ACTIVE
+### Gate 3C — Predicted state/output safety + reproducible experiments — PASS
 
-Đã triển khai:
+Đã khóa bằng regression + CI:
 
 - predicted position inequalities,
 - predicted velocity inequalities,
 - predicted output inequalities,
-- constraint rows được sinh trực tiếp từ `Φ`, `Γ`, free response và `C`,
+- constraint rows sinh trực tiếp từ `Φ`, `Γ`, free response và `C`,
 - safety-envelope preset,
 - disturbance-stress preset,
 - infeasible-envelope guard,
@@ -91,53 +91,82 @@ J_total = w1 * tracking_error
 - versioned experiment schema `mpc-pid-experiment/v1`,
 - local save/load,
 - JSON import/export,
+- roundtrip serialization regression,
 - reproducible solver + safety benchmark,
 - CI artifacts chứa smoke + benchmark logs.
 
-PASS khi:
+Nominal periodic constrained MPC giữ plant safety violation bằng 0 trong safety-envelope regression. Impossible envelope trả explicit infeasible và fallback vẫn giữ actuator/rate constraints.
 
-1. nominal periodic constrained MPC giữ predicted envelope khả thi,
-2. impossible envelope trả explicit infeasible,
-3. fallback vẫn giữ actuator/rate constraints,
-4. experiment export → import tái tạo cấu hình tương đương,
-5. benchmark chạy tái lập được,
-6. predicted feasibility và actual plant safety được báo riêng.
+### Gate 3D — Safety Authority / Governor — PASS
 
-### Decision Gate 3D — Safety Authority
-
-Đây **không phải tính năng mặc định phải thêm**. Quyết định dựa trên benchmark.
-
-Nếu:
+Benchmark chứng minh guidance-only không đủ authority:
 
 ```text
-predicted QP violation ≈ 0
-nhưng
-actual hybrid plant safety violation > acceptable threshold
+Periodic constrained MPC plant violation: 0
+Hybrid guidance-only violation:           > 0
+Hybrid + Safety Governor violation:        0
 ```
 
-thì guidance-only không đủ authority để gọi state/output constraints là hard safety của toàn closed-loop.
+Kiến trúc đã triển khai:
 
-Khi đó triển khai theo thứ tự:
+```text
+MPC safe plan
+    ↓
+predictive guidance
+    ↓
+PID proposal
+    ↓
+actuator + slew + plan-continuation conditioning
+    ↓
+short-horizon state/output admissibility check
+    ↓
+safe command
+```
 
-1. admissibility monitor cho PID proposal,
-2. reference governor hoặc one-step safety filter,
-3. MPC first-move / feasible-set based command guard,
-4. fallback PID/LQR khi safety solver fail,
-5. sau này mới cân nhắc Control Barrier Function cho nonlinear plant.
+Governor không chạy thêm một full MPC. Nó chỉ thay first move của PID và dùng phần đuôi MPC plan làm continuation để kiểm tra short horizon.
 
-Mục tiêu không phải để MPC thay PID, mà để PID vẫn phản xạ nhanh nhưng **không được phép phát lệnh khiến predicted safe set mất khả thi**.
+Các điểm đã khóa:
 
-Nếu benchmark chứng minh hybrid guidance-only đủ an toàn trong phạm vi nghiên cứu hiện tại, Gate 3D có thể tạm DEFER và chuyển sang State Estimation.
+- dynamic PID limits để anti-windup biết miền admissible,
+- MPC plan shifting giữa các event-trigger solves,
+- emergency actuator-safe fallback,
+- actual plant safety regression,
+- safety-envelope intervention và actuator/plan conditioning được đo tách biệt,
+- disturbance-stress benchmark thật sự chứa disturbance trong cửa sổ benchmark.
 
-### Gate 4 — State estimation
+Benchmark đại diện sau khi tách semantics:
 
-PASS khi:
-- Measurement noise được mô phỏng.
-- Observer/Kalman Filter cải thiện estimate.
-- Controller không còn giả định đo trực tiếp mọi state.
-- Prediction dùng estimated state, không dùng ground-truth simulation state.
+```text
+Safety-envelope intervention rate: ~2.5%
+Actuator/plan conditioning rate:   ~97.5%
+Hybrid + Safety plant violation:    0
+```
 
-Sau đó mới đi EKF/UKF.
+Điều này có nghĩa Governor chỉ phải dùng **state/output safety authority** ở một phần nhỏ mẫu; phần conditioning cao chủ yếu đến từ hard `u`, hard `Δu` và khả năng nối tiếp MPC plan, không được gọi nhầm là safety intervention.
+
+Một phát hiện quan trọng khác: khi guidance-only đưa plant ra khỏi safe region, constrained QP có thể mất recursive feasibility và rơi vào fallback nhiều lần. Governor giúp giữ plant trong miền mà các lần MPC solve sau tiếp tục khả thi.
+
+### Gate 4 — State estimation — ACTIVE (estimator core only)
+
+Đã bắt đầu nhưng **chưa nối estimate vào controller**:
+
+- deterministic seeded Gaussian noise source,
+- reusable two-state linear Kalman Filter,
+- Joseph-form covariance update,
+- innovation / innovation-variance / Kalman-gain diagnostics,
+- deterministic estimation smoke test.
+
+Gate 4 chỉ PASS khi:
+
+1. measurement noise được mô phỏng trong closed-loop,
+2. Kalman giảm estimation RMSE so với measurement thô,
+3. covariance hữu hạn, đối xứng và ổn định,
+4. Event Trigger dùng estimated state,
+5. MPC prediction dùng estimated state,
+6. PID/feedback path không còn đọc trực tiếp simulation ground truth,
+7. safety audit vẫn so actual plant với estimated-controller behavior để không che model/estimator error.
+
+Sau Gate 4 mới đi EKF/UKF.
 
 ### Gate 5 — Nonlinear plants
 
@@ -193,17 +222,29 @@ PASS khi:
 10. Solver fail phải có semantics rõ.
 11. Penalty không được nhầm với hard constraint.
 12. Predicted safety không được nhầm với actual closed-loop safety.
-13. Nếu hybrid không có authority bảo đảm constraint, UI và tài liệu phải nói rõ điều đó.
+13. Safety intervention không được nhầm với actuator/rate conditioning.
+14. Estimator quality phải đo bằng error statistics, không chỉ nhìn curve đẹp.
 
-## Milestone đang khóa
+## Milestone hiện tại
 
-**V0.3C — Safety Envelope + Reproducible Research**
+**Gate 4 — Linear State Estimation**
 
-Sau khi benchmark PASS, quyết định giữa hai đường:
+Thứ tự thực hiện:
 
 ```text
-Safety gap đáng kể → V0.3D Safety Governor → Gate 4 Kalman
-Safety gap nhỏ/chấp nhận được → Gate 4 Kalman trực tiếp
+seeded measurement noise
+        ↓
+standalone linear Kalman core
+        ↓
+estimation RMSE regression
+        ↓
+closed-loop sensor interface
+        ↓
+controller state = x_hat
+        ↓
+MPC + Event Trigger + PID + Governor with estimated state
+        ↓
+noise / mismatch / disturbance benchmark
 ```
 
-External OSQP/WASM backend không được thêm chỉ vì “chuẩn công nghiệp”. Chỉ thêm khi benchmark cho thấy solver hiện tại là bottleneck, cần constraint scale lớn hơn hoặc cần đối chiếu kết quả với backend độc lập.
+External OSQP/WASM backend chưa được thêm chỉ vì “chuẩn công nghiệp”. Chỉ thêm khi benchmark cho thấy solver hiện tại là bottleneck cần xử lý trước plant nonlinear, hoặc cần backend độc lập để đối chiếu numerical correctness ở constraint scale lớn hơn.
