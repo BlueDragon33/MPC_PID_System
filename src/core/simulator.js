@@ -10,7 +10,7 @@ export const defaultConfig = {
   plant: { stiffness: 1.45, gain: 1.0, damping: 0.82 },
   pid: { kp: 5.2, ki: 1.35, kd: 0.52, uMin: -4, uMax: 4, antiWindup: 0.5 },
   mpc: {
-    solver: SOLVER_BACKENDS.PROJECTED_GRADIENT,
+    solver: SOLVER_BACKENDS.BOX_QP,
     horizon: 35,
     qPosition: 9,
     qVelocity: 1.2,
@@ -19,6 +19,9 @@ export const defaultConfig = {
     terminalWeight: 8,
     iterations: 20,
     learningRate: 0.12,
+    qpIterations: 80,
+    qpTolerance: 1e-4,
+    qpStepScale: 0.98,
     uMin: -4,
     uMax: 4,
     referenceLead: 0.5,
@@ -38,6 +41,7 @@ export const defaultConfig = {
 };
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+const average = (values) => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
 
 export function getStateSpaceModel(cfg = defaultConfig) {
   return createSecondOrderModel(cfg);
@@ -57,12 +61,19 @@ function settlingTime(samples, target, tolerance = 0.02) {
   return null;
 }
 
-function metrics(samples, target, solverTimes) {
+function metrics(samples, target, solverRecords) {
   const dt = samples[1]?.t ?? 0.02;
   const peak = Math.max(...samples.map((p) => p.x));
-  const solveCount = solverTimes.length;
+  const solveCount = solverRecords.length;
+  const solverTimes = solverRecords.map((record) => record.solveMs);
   const periodicEquivalent = Math.max(1, samples.length);
   const totalSolveMs = solverTimes.reduce((a, b) => a + b, 0);
+  const diagnostics = solverRecords.map((record) => record.diagnostics).filter(Boolean);
+  const convergenceDiagnostics = diagnostics.filter((item) => typeof item.converged === 'boolean');
+  const kktValues = diagnostics.map((item) => item.kktResidual).filter(Number.isFinite);
+  const feasibilityValues = diagnostics.map((item) => item.feasibilityViolation).filter(Number.isFinite);
+  const iterationValues = diagnostics.map((item) => item.iterations).filter(Number.isFinite);
+  const activeRatios = diagnostics.map((item) => item.activeConstraintRatio).filter(Number.isFinite);
 
   return {
     overshoot: Math.max(0, ((peak - target) / Math.max(Math.abs(target), 1e-9)) * 100),
@@ -75,6 +86,14 @@ function metrics(samples, target, solverTimes) {
     totalSolveMs,
     computeReduction: 100 * (1 - solveCount / periodicEquivalent),
     triggerRate: solveCount / Math.max(samples[samples.length - 1]?.t ?? 1, 1e-9),
+    convergenceRate: convergenceDiagnostics.length
+      ? 100 * convergenceDiagnostics.filter((item) => item.converged).length / convergenceDiagnostics.length
+      : null,
+    avgIterations: average(iterationValues),
+    avgKktResidual: average(kktValues),
+    maxKktResidual: kktValues.length ? Math.max(...kktValues) : null,
+    maxFeasibilityViolation: feasibilityValues.length ? Math.max(...feasibilityValues) : null,
+    avgActiveConstraintRatio: average(activeRatios),
   };
 }
 
@@ -101,8 +120,16 @@ export function runSimulation(mode, userConfig = {}) {
   let lastSolve = -Infinity;
   let reference = cfg.setpoint;
   let warmStart = null;
-  const solverTimes = [];
+  const solverRecords = [];
   const samples = [];
+
+  function recordSolution(solution) {
+    solverRecords.push({
+      solveMs: solution.solveMs,
+      solver: solution.solver,
+      diagnostics: solution.diagnostics || null,
+    });
+  }
 
   for (let k = 0; k <= steps; k += 1) {
     const t = k * cfg.dt;
@@ -121,6 +148,7 @@ export function runSimulation(mode, userConfig = {}) {
     let triggered = false;
     let triggerReason = '';
     let mpcCost = null;
+    let solverDiagnostics = null;
 
     if (mode === 'PID') {
       u = pid.update(cfg.setpoint, state.x);
@@ -129,7 +157,8 @@ export function runSimulation(mode, userConfig = {}) {
       u = solution.u;
       warmStart = solution.sequence;
       mpcCost = solution.cost;
-      solverTimes.push(solution.solveMs);
+      solverDiagnostics = solution.diagnostics || null;
+      recordSolution(solution);
       triggered = true;
       triggerReason = 'periodic';
     } else if (event.triggered) {
@@ -138,8 +167,9 @@ export function runSimulation(mode, userConfig = {}) {
       reference = predictiveReference(solution, cfg.setpoint, cfg);
       lastSolve = t;
       lastSolveState = { ...state };
-      solverTimes.push(solution.solveMs);
       mpcCost = solution.cost;
+      solverDiagnostics = solution.diagnostics || null;
+      recordSolution(solution);
       triggered = true;
       triggerReason = event.reason;
       u = pid.update(reference, state.x);
@@ -161,6 +191,11 @@ export function runSimulation(mode, userConfig = {}) {
       triggered,
       triggerReason,
       mpcCost,
+      solverConverged: solverDiagnostics?.converged ?? null,
+      solverIterations: solverDiagnostics?.iterations ?? null,
+      kktResidual: solverDiagnostics?.kktResidual ?? null,
+      feasibilityViolation: solverDiagnostics?.feasibilityViolation ?? null,
+      activeConstraintRatio: solverDiagnostics?.activeConstraintRatio ?? null,
     });
 
     expectedState = stepSecondOrderPlant(state, u, 0, cfg);
@@ -170,9 +205,10 @@ export function runSimulation(mode, userConfig = {}) {
 
   return {
     samples,
-    metrics: metrics(samples, cfg.setpoint, solverTimes),
+    metrics: metrics(samples, cfg.setpoint, solverRecords),
     config: cfg,
     model: createSecondOrderModel(cfg),
+    solverRecords,
   };
 }
 
