@@ -19,7 +19,7 @@ Reference / Planner
         ↓              │
     MPC / NMPC         │ reuse previous plan
         ↓              │
- Optimal reference  ←──┘
+ Predictive guidance ←─┘
         ↓
  Fast PID / LQR loop
         ↓
@@ -34,9 +34,9 @@ Reference / Planner
 - Plant rời rạc dạng state-space với trạng thái `[position, velocity]ᵀ`.
 - PID fast loop có saturation và anti-windup cơ bản.
 - Finite-horizon MPC tối ưu **control sequence** thay vì một lệnh điều khiển cố định.
-- Projected-gradient optimizer với input bounds, state cost, input cost và Δu cost.
+- Projected-gradient optimizer với input bounds, state cost, terminal cost, input cost và Δu cost.
 - Warm-start cho chuỗi điều khiển giữa các lần solve.
-- Hybrid MPC → PID supervisor.
+- Hybrid MPC → PID dùng **predictive reference shaping**: MPC dự đoán sai số tương lai rồi tạo setpoint dẫn trước có giới hạn cho PID.
 - Event trigger dựa trên:
   - model prediction error,
   - normalized state change,
@@ -47,12 +47,28 @@ Reference / Planner
 - Compute profiler: solve count, solve rate, average/max/total solver time và phần trăm solve được tránh.
 - So sánh PID / periodic MPC / event-triggered MPC+PID.
 - Metrics: overshoot, settling time, IAE, control effort, MPC solve count.
+- Smoke test và GitHub Actions CI cho control core + production build.
 
 > Solver V0.2 là bộ tối ưu convex dạng projected-gradient viết trực tiếp cho research prototype. Nó đã tối ưu cả chuỗi điều khiển và hỗ trợ ràng buộc input, nhưng **chưa được coi là QP solver công nghiệp**. QP backend chuẩn và benchmark solver độc lập là gate kế tiếp.
 
-## Research gates
+## Cấu trúc lõi
 
-Dự án chỉ tiến sang tầng tiếp theo khi tầng trước đo được và kiểm chứng được.
+```text
+src/core/
+├── models/
+│   └── secondOrderPlant.js
+├── controllers/
+│   └── pid.js
+├── solvers/
+│   └── projectedGradientMPC.js
+├── triggers/
+│   └── eventTrigger.js
+└── simulator.js
+```
+
+`simulator.js` chỉ đóng vai trò orchestration. Plant, controller, optimizer và trigger policy được tách độc lập để sau này thay QP solver, thêm Kalman Filter hoặc chuyển sang UAV/UGV/USV mà không phải viết lại toàn bộ hệ thống.
+
+## Research gates
 
 ### Gate A — Linear research core
 - State-space plant đúng và có thể thay model.
@@ -76,8 +92,8 @@ Dự án chỉ tiến sang tầng tiếp theo khi tầng trước đo được v
 - EKF / UKF khi chuyển nonlinear.
 
 ### Gate D — Autonomous plant models
-- UAV attitude/position model.
 - UGV bicycle model.
+- UAV attitude/position model.
 - USV planar model.
 - Trajectory tracking + constraints + disturbances.
 
@@ -95,6 +111,8 @@ Dự án chỉ tiến sang tầng tiếp theo khi tầng trước đo được v
 - Export controller configuration.
 - Real plant validation.
 
+Chi tiết định hướng và tiêu chí PASS/FAIL nằm trong [`docs/RESEARCH_DIRECTION.md`](docs/RESEARCH_DIRECTION.md).
+
 ## Nguyên tắc kiến trúc
 
 1. PID không bị loại bỏ; PID giữ vòng phản xạ nhanh khi nó là lựa chọn phù hợp.
@@ -110,6 +128,7 @@ Dự án chỉ tiến sang tầng tiếp theo khi tầng trước đo được v
 
 ```bash
 npm install
+npm run smoke
 npm run dev
 ```
 
