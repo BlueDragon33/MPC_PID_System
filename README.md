@@ -28,28 +28,51 @@ Reference / Planner
       Sensor
 ```
 
-## V0.2 hiện tại
+## V0.3 hiện tại — QP Core
 
-- React + Vite web-app.
+- React + Vite research web-app.
 - Plant rời rạc dạng state-space với trạng thái `[position, velocity]ᵀ`.
 - PID fast loop có saturation và anti-windup cơ bản.
-- Finite-horizon MPC tối ưu **control sequence** thay vì một lệnh điều khiển cố định.
-- Projected-gradient optimizer với input bounds, state cost, terminal cost, input cost và Δu cost.
-- Warm-start cho chuỗi điều khiển giữa các lần solve.
-- Hybrid MPC → PID dùng **predictive reference shaping**: MPC dự đoán sai số tương lai rồi tạo setpoint dẫn trước có giới hạn cho PID.
-- Event trigger dựa trên:
-  - model prediction error,
-  - normalized state change,
-  - actuator constraint proximity,
-  - watchdog timeout.
-- Disturbance injection chỉ tác động lên plant thật; MPC dùng model danh định để tạo sai lệch có ý nghĩa vật lý.
-- Trigger timeline trực quan.
-- Compute profiler: solve count, solve rate, average/max/total solver time và phần trăm solve được tránh.
-- So sánh PID / periodic MPC / event-triggered MPC+PID.
-- Metrics: overshoot, settling time, IAE, control effort, MPC solve count.
-- Smoke test và GitHub Actions CI cho control core + production build.
+- MPC tối ưu **control sequence** trên finite horizon.
+- Condensed prediction model:
 
-> Solver V0.2 là bộ tối ưu convex dạng projected-gradient viết trực tiếp cho research prototype. Nó đã tối ưu cả chuỗi điều khiển và hỗ trợ ràng buộc input, nhưng **chưa được coi là QP solver công nghiệp**. QP backend chuẩn và benchmark solver độc lập là gate kế tiếp.
+```text
+X = Φ x₀ + Γ U
+```
+
+- Quadratic objective ở dạng:
+
+```text
+min  0.5 Uᵀ H U + fᵀ U
+```
+
+- Hai solver backend:
+  - `box-qp`: solver chính cho convex QP với hard input bounds.
+  - `projected-gradient`: baseline/fallback để benchmark.
+- Box-QP dùng warm-start, accelerated projected steps và monotone restart.
+- Diagnostics cho từng lần solve:
+  - convergence status,
+  - iteration count,
+  - KKT residual,
+  - feasibility violation,
+  - active lower/upper bounds,
+  - active constraint ratio,
+  - solver time.
+- Hybrid MPC → PID dùng **predictive reference shaping**: MPC dự đoán sai số tương lai rồi tạo setpoint dẫn trước có giới hạn cho PID.
+- Event trigger dựa trên model prediction error, normalized state change, actuator constraint proximity và watchdog timeout.
+- Disturbance injection chỉ tác động lên plant thật; MPC dùng model danh định.
+- Dashboard hiển thị response, trigger timeline, compute reduction và solver-health metrics.
+- Smoke test kiểm tra:
+  - state/control hữu hạn,
+  - event-trigger giảm số lần solve,
+  - condensed QP khớp rollout objective,
+  - Hessian đối xứng,
+  - hard input bounds,
+  - feasibility,
+  - KKT residual.
+- GitHub Actions CI chạy control-core smoke test + production build.
+
+> V0.3 hiện đã có **QP backend thực cho bài toán convex có box input constraints**, nhưng chưa phải generic industrial QP stack. Hard slew-rate constraints `Δu`, state/output inequalities và OSQP/WASM backend vẫn là các gate tiếp theo.
 
 ## Cấu trúc lõi
 
@@ -59,31 +82,44 @@ src/core/
 │   └── secondOrderPlant.js
 ├── controllers/
 │   └── pid.js
+├── mpc/
+│   ├── condensedQP.js
+│   └── rollout.js
 ├── solvers/
+│   ├── index.js
+│   ├── boxQPMPC.js
 │   └── projectedGradientMPC.js
 ├── triggers/
 │   └── eventTrigger.js
 └── simulator.js
 ```
 
-`simulator.js` chỉ đóng vai trò orchestration. Plant, controller, optimizer và trigger policy được tách độc lập để sau này thay QP solver, thêm Kalman Filter hoặc chuyển sang UAV/UGV/USV mà không phải viết lại toàn bộ hệ thống.
+`simulator.js` chỉ đóng vai trò orchestration. Plant, controller, QP formulation, solver và trigger policy được tách độc lập để sau này thay backend, thêm Kalman Filter hoặc chuyển sang UAV/UGV/USV mà không phải viết lại toàn bộ hệ thống.
 
 ## Research gates
 
-### Gate A — Linear research core
-- State-space plant đúng và có thể thay model.
-- PID benchmark ổn định.
-- MPC control-sequence optimization.
-- Event-trigger logic có watchdog.
+### Gate A — Linear research core — PASS
+- State-space plant.
+- PID benchmark.
+- MPC sequence optimization.
+- Event-trigger + watchdog.
 - Disturbance response.
 - Compute profiling.
 
-### Gate B — QP MPC
-- Viết condensed prediction model.
-- Xây `H`, `f`, bounds cho quadratic program.
-- Tách solver interface khỏi controller.
-- So sánh projected-gradient với QP backend.
-- Kiểm tra feasibility, convergence và timing.
+### Gate B1 — Condensed QP + box constraints — PASS
+- Prediction matrices `Φ`, `Γ`.
+- `H`, `f` và input bounds.
+- Solver adapter.
+- Box-QP backend.
+- KKT/feasibility/convergence diagnostics.
+- Regression test giữa condensed objective và rollout objective.
+
+### Gate B2 — General constrained MPC — NEXT
+- Hard `Δu` / slew-rate constraints.
+- State/output inequalities.
+- Explicit infeasibility handling.
+- Benchmark box-QP vs external QP backend.
+- Reproducible experiment presets.
 
 ### Gate C — State estimation
 - Observer / Kalman Filter.
@@ -119,7 +155,7 @@ Chi tiết định hướng và tiêu chí PASS/FAIL nằm trong [`docs/RESEARCH
 2. MPC chỉ được dùng ở nơi prediction, multivariable coupling hoặc constraints mang lại giá trị.
 3. MPC không bắt buộc solve theo timer cố định; Event Trigger phải chứng minh được lợi ích bằng số liệu.
 4. Watchdog luôn tồn tại để tránh dùng prediction quá cũ.
-5. Mọi controller phải được đánh giá theo **control quality + compute cost**.
+5. Mọi controller phải được đánh giá theo **control quality + compute cost + solver quality**.
 6. Simulation core, plant model, solver, trigger policy và UI phải tách lớp.
 7. Không chuyển sang AI/Learning MPC trước khi baseline classical control được kiểm chứng.
 8. Không gọi một thuật toán là “real-time” nếu chưa có timing benchmark trên target hardware.
