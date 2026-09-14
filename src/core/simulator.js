@@ -1,8 +1,15 @@
 import { createPIDController } from './controllers/pid.js';
+import { createAugmentedDisturbanceKalmanFilter } from './estimation/augmentedDisturbanceKalmanFilter.js';
 import { createLinearKalmanFilter } from './estimation/linearKalmanFilter.js';
 import { createMeasurementSensor } from './estimation/measurementSensor.js';
 import { applyCovarianceConstraintTightening } from './estimation/uncertaintyTightening.js';
-import { createSecondOrderModel, disturbanceAt, stepSecondOrderPlant } from './models/secondOrderPlant.js';
+import {
+  createSecondOrderModel,
+  createTruthPlantConfig,
+  disturbanceAt,
+  equivalentDisturbance,
+  stepSecondOrderPlant,
+} from './models/secondOrderPlant.js';
 import {
   computeAdmissibleCommandInterval,
   computePhysicalCommandInterval,
@@ -16,6 +23,12 @@ export const defaultConfig = {
   duration: 12,
   setpoint: 1,
   plant: { stiffness: 1.45, gain: 1.0, damping: 0.82 },
+  truthPlant: {
+    enabled: false,
+    stiffnessScale: 1,
+    dampingScale: 1,
+    gainScale: 1,
+  },
   pid: { kp: 5.2, ki: 1.35, kd: 0.52, uMin: -4, uMax: 4, antiWindup: 0.5 },
   mpc: {
     solver: SOLVER_BACKENDS.CONSTRAINED_QP,
@@ -67,6 +80,9 @@ export const defaultConfig = {
     initialVelocityVariance: 0.8,
     constraintTighteningEnabled: false,
     constraintSigma: 2.0,
+    disturbanceStateEnabled: false,
+    disturbanceProcessVariance: 8e-3,
+    initialDisturbanceVariance: 0.8,
   },
   trigger: {
     predictionError: 0.035,
@@ -170,6 +186,18 @@ function metrics(samples, target, solverRecords, cfg) {
   const measurementRmse = rms(measurementErrors);
   const estimatePositionRmse = rms(estimatePositionErrors);
 
+  const disturbanceEstimateSamples = samples.filter((sample) => sample.disturbanceEstimateEnabled);
+  const disturbanceEstimateErrors = disturbanceEstimateSamples
+    .map((sample) => sample.estimateD - sample.equivalentDisturbance)
+    .filter(Number.isFinite);
+  const activeDisturbanceEstimateErrors = disturbanceEstimateSamples
+    .filter((sample) => Math.abs(sample.equivalentDisturbance) > 0.05)
+    .map((sample) => sample.estimateD - sample.equivalentDisturbance)
+    .filter(Number.isFinite);
+  const disturbanceVariances = disturbanceEstimateSamples
+    .map((sample) => sample.disturbanceVariance)
+    .filter(Number.isFinite);
+
   const tighteningSamples = samples.filter((sample) => sample.uncertaintyTighteningEnabled);
   const positionMargins = tighteningSamples.map((sample) => sample.uncertaintyPositionMargin).filter(Number.isFinite);
   const velocityMargins = tighteningSamples.map((sample) => sample.uncertaintyVelocityMargin).filter(Number.isFinite);
@@ -228,6 +256,12 @@ function metrics(samples, target, solverRecords, cfg) {
     estimateToMeasurementRmseRatio: measurementRmse && estimatePositionRmse != null
       ? estimatePositionRmse / measurementRmse
       : null,
+    disturbanceEstimateEnabled: disturbanceEstimateSamples.length > 0,
+    disturbanceEstimateRmse: rms(disturbanceEstimateErrors),
+    activeDisturbanceEstimateRmse: rms(activeDisturbanceEstimateErrors),
+    avgDisturbanceVariance: average(disturbanceVariances),
+    finalDisturbanceVariance: disturbanceVariances.length ? disturbanceVariances[disturbanceVariances.length - 1] : null,
+    truthPlantMismatchEnabled: samples.some((sample) => sample.truthPlantMismatchEnabled),
     uncertaintyTighteningEnabled: tighteningSamples.length > 0,
     avgUncertaintyPositionMargin: average(positionMargins),
     maxUncertaintyPositionMargin: positionMargins.length ? Math.max(...positionMargins) : 0,
@@ -244,6 +278,7 @@ function mergeConfig(userConfig) {
     ...defaultConfig,
     ...userConfig,
     plant: { ...defaultConfig.plant, ...(userConfig.plant || {}) },
+    truthPlant: { ...defaultConfig.truthPlant, ...(userConfig.truthPlant || {}) },
     pid: { ...defaultConfig.pid, ...(userConfig.pid || {}) },
     mpc: { ...defaultConfig.mpc, ...(userConfig.mpc || {}) },
     safety: { ...defaultConfig.safety, ...(userConfig.safety || {}) },
@@ -258,7 +293,10 @@ export function runSimulation(mode, userConfig = {}) {
   const steps = Math.floor(cfg.duration / cfg.dt);
   const pid = createPIDController(cfg.pid, cfg.dt);
   const model = createSecondOrderModel(cfg);
+  const truthCfg = createTruthPlantConfig(cfg);
+  const truthModel = createSecondOrderModel(truthCfg);
   const estimationEnabled = Boolean(cfg.estimation.enabled);
+  const disturbanceStateEnabled = Boolean(estimationEnabled && cfg.estimation.disturbanceStateEnabled);
   const sensor = createMeasurementSensor({
     C: model.C,
     noiseStd: estimationEnabled ? cfg.estimation.measurementNoiseStd : 0,
@@ -273,28 +311,51 @@ export function runSimulation(mode, userConfig = {}) {
   let estimatorDiagnostics = null;
   let estimatorCovariance = null;
   let covarianceTrace = null;
+  let disturbanceEstimate = 0;
+  let disturbanceVariance = null;
 
   if (estimationEnabled) {
-    estimator = createLinearKalmanFilter({
-      A: model.A,
-      B: model.B,
-      C: model.C,
-      processCovariance: [
-        cfg.estimation.processPositionVariance,
-        cfg.estimation.processVelocityVariance,
-      ],
-      measurementVariance: Math.max(1e-12, cfg.estimation.measurementNoiseStd ** 2),
-      initialState: [state.x, state.v],
-      initialCovariance: [
-        cfg.estimation.initialPositionVariance,
-        cfg.estimation.initialVelocityVariance,
-      ],
-    });
+    estimator = disturbanceStateEnabled
+      ? createAugmentedDisturbanceKalmanFilter({
+          A: model.A,
+          B: model.B,
+          E: model.E,
+          C: model.C,
+          processCovariance: [
+            cfg.estimation.processPositionVariance,
+            cfg.estimation.processVelocityVariance,
+            cfg.estimation.disturbanceProcessVariance,
+          ],
+          measurementVariance: Math.max(1e-12, cfg.estimation.measurementNoiseStd ** 2),
+          initialState: [state.x, state.v, 0],
+          initialCovariance: [
+            cfg.estimation.initialPositionVariance,
+            cfg.estimation.initialVelocityVariance,
+            cfg.estimation.initialDisturbanceVariance,
+          ],
+        })
+      : createLinearKalmanFilter({
+          A: model.A,
+          B: model.B,
+          C: model.C,
+          processCovariance: [
+            cfg.estimation.processPositionVariance,
+            cfg.estimation.processVelocityVariance,
+          ],
+          measurementVariance: Math.max(1e-12, cfg.estimation.measurementNoiseStd ** 2),
+          initialState: [state.x, state.v],
+          initialCovariance: [
+            cfg.estimation.initialPositionVariance,
+            cfg.estimation.initialVelocityVariance,
+          ],
+        });
     const initialEstimate = estimator.update(measurementSample.value);
     controllerState = { x: initialEstimate.x, v: initialEstimate.v };
+    disturbanceEstimate = disturbanceStateEnabled ? initialEstimate.d : 0;
     estimatorDiagnostics = initialEstimate.diagnostics;
     estimatorCovariance = initialEstimate.covariance;
     covarianceTrace = estimatorDiagnostics.covarianceTrace;
+    disturbanceVariance = disturbanceStateEnabled ? estimatorCovariance?.[2]?.[2] ?? null : null;
   }
 
   let expectedState = { ...controllerState };
@@ -449,6 +510,7 @@ export function runSimulation(mode, userConfig = {}) {
     }
 
     const disturbance = disturbanceAt(t, cfg);
+    const equivalentD = equivalentDisturbance(state, u, disturbance, cfg, truthCfg);
     samples.push({
       t,
       x: state.x,
@@ -458,12 +520,17 @@ export function runSimulation(mode, userConfig = {}) {
       u,
       reference,
       disturbance,
+      equivalentDisturbance: equivalentD,
+      truthPlantMismatchEnabled: Boolean(cfg.truthPlant.enabled),
       measurement: measurementSample.value,
       measurementTruth: measurementSample.truth,
       measurementNoise: measurementSample.noise,
       estimationEnabled,
       estimateX: estimationEnabled ? controllerState.x : null,
       estimateV: estimationEnabled ? controllerState.v : null,
+      disturbanceEstimateEnabled: disturbanceStateEnabled,
+      estimateD: disturbanceStateEnabled ? disturbanceEstimate : null,
+      disturbanceVariance: disturbanceStateEnabled ? disturbanceVariance : null,
       innovation: estimationEnabled ? estimatorDiagnostics?.innovation ?? null : null,
       innovationVariance: estimationEnabled ? estimatorDiagnostics?.innovationVariance ?? null : null,
       covarianceTrace: estimationEnabled ? covarianceTrace : null,
@@ -512,20 +579,24 @@ export function runSimulation(mode, userConfig = {}) {
 
     expectedState = stepSecondOrderPlant(controllerState, u, 0, controlCfg);
     previousU = u;
-    state = stepSecondOrderPlant(state, u, disturbance, cfg);
+    state = stepSecondOrderPlant(state, u, disturbance, truthCfg);
 
     measurementSample = sensor.read(state);
     if (estimationEnabled) {
       const estimate = estimator.step(u, measurementSample.value);
       controllerState = { x: estimate.x, v: estimate.v };
+      disturbanceEstimate = disturbanceStateEnabled ? estimate.d : 0;
       estimatorDiagnostics = estimate.diagnostics;
       estimatorCovariance = estimate.covariance;
       covarianceTrace = estimate.diagnostics.covarianceTrace;
+      disturbanceVariance = disturbanceStateEnabled ? estimatorCovariance?.[2]?.[2] ?? null : null;
     } else {
       controllerState = { ...state };
+      disturbanceEstimate = 0;
       estimatorDiagnostics = null;
       estimatorCovariance = null;
       covarianceTrace = null;
+      disturbanceVariance = null;
     }
 
     shiftMpcPlan();
@@ -536,6 +607,7 @@ export function runSimulation(mode, userConfig = {}) {
     metrics: metrics(samples, cfg.setpoint, solverRecords, cfg),
     config: cfg,
     model,
+    truthModel,
     solverRecords,
   };
 }
