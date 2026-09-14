@@ -83,6 +83,7 @@ export const defaultConfig = {
     disturbanceStateEnabled: false,
     disturbanceProcessVariance: 8e-3,
     initialDisturbanceVariance: 0.8,
+    disturbanceRetention: 1,
   },
   trigger: {
     predictionError: 0.035,
@@ -333,6 +334,7 @@ export function runSimulation(mode, userConfig = {}) {
             cfg.estimation.initialVelocityVariance,
             cfg.estimation.initialDisturbanceVariance,
           ],
+          disturbanceRetention: cfg.estimation.disturbanceRetention,
         })
       : createLinearKalmanFilter({
           A: model.A,
@@ -531,6 +533,7 @@ export function runSimulation(mode, userConfig = {}) {
       disturbanceEstimateEnabled: disturbanceStateEnabled,
       estimateD: disturbanceStateEnabled ? disturbanceEstimate : null,
       disturbanceVariance: disturbanceStateEnabled ? disturbanceVariance : null,
+      disturbanceRetention: disturbanceStateEnabled ? cfg.estimation.disturbanceRetention : null,
       innovation: estimationEnabled ? estimatorDiagnostics?.innovation ?? null : null,
       innovationVariance: estimationEnabled ? estimatorDiagnostics?.innovationVariance ?? null : null,
       covarianceTrace: estimationEnabled ? covarianceTrace : null,
