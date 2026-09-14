@@ -201,3 +201,63 @@ console.table(sigmaSweep.map(({ constraintSigma, result }) => ({
   'max Δv': result.metrics.maxUncertaintyVelocityMargin.toFixed(4),
   'invalid envelope': result.metrics.uncertaintyInvalidEnvelopeCount,
 })));
+
+function mismatchBenchmarkConfig(presetId) {
+  const preset = applyExperimentPreset(defaultConfig, presetId);
+  return {
+    ...preset,
+    duration: 4.2,
+    disturbance: {
+      ...preset.disturbance,
+      enabled: true,
+      start: 1.15,
+      duration: 1.1,
+      amplitude: 1.0,
+    },
+    mpc: {
+      ...preset.mpc,
+      solver: SOLVER_BACKENDS.CONSTRAINED_QP,
+      horizon: 12,
+      qpIterations: Math.max(100, preset.mpc.qpIterations),
+      qpProjectionCycles: Math.max(16, preset.mpc.qpProjectionCycles),
+      qpTolerance: Math.min(5e-5, preset.mpc.qpTolerance),
+    },
+  };
+}
+
+const mismatchStateOnly = runSimulation('HYBRID_SAFE', mismatchBenchmarkConfig('model-mismatch'));
+const mismatchDisturbanceObserver = runSimulation('HYBRID_SAFE', mismatchBenchmarkConfig('mismatch-observer'));
+
+console.log('\nModel-mismatch estimator benchmark');
+console.table([
+  {
+    estimator: '2-state KF',
+    IAE: mismatchStateOnly.metrics.iae.toFixed(4),
+    solves: mismatchStateOnly.metrics.solveCount,
+    'avoid %': mismatchStateOnly.metrics.computeReduction.toFixed(1),
+    'conv %': mismatchStateOnly.metrics.convergenceRate == null ? 'n/a' : mismatchStateOnly.metrics.convergenceRate.toFixed(1),
+    fallback: mismatchStateOnly.metrics.fallbackCount,
+    'plant safety': mismatchStateOnly.metrics.maxActualSafetyViolation.toExponential(2),
+    xRMSE: mismatchStateOnly.metrics.estimatePositionRmse?.toFixed(4) ?? 'n/a',
+    vRMSE: mismatchStateOnly.metrics.estimateVelocityRmse?.toFixed(4) ?? 'n/a',
+    dRMSE: '—',
+    'active dRMSE': '—',
+    rho: '—',
+  },
+  {
+    estimator: 'x-v-d KF',
+    IAE: mismatchDisturbanceObserver.metrics.iae.toFixed(4),
+    solves: mismatchDisturbanceObserver.metrics.solveCount,
+    'avoid %': mismatchDisturbanceObserver.metrics.computeReduction.toFixed(1),
+    'conv %': mismatchDisturbanceObserver.metrics.convergenceRate == null ? 'n/a' : mismatchDisturbanceObserver.metrics.convergenceRate.toFixed(1),
+    fallback: mismatchDisturbanceObserver.metrics.fallbackCount,
+    'plant safety': mismatchDisturbanceObserver.metrics.maxActualSafetyViolation.toExponential(2),
+    xRMSE: mismatchDisturbanceObserver.metrics.estimatePositionRmse?.toFixed(4) ?? 'n/a',
+    vRMSE: mismatchDisturbanceObserver.metrics.estimateVelocityRmse?.toFixed(4) ?? 'n/a',
+    dRMSE: mismatchDisturbanceObserver.metrics.disturbanceEstimateRmse?.toFixed(4) ?? 'n/a',
+    'active dRMSE': mismatchDisturbanceObserver.metrics.activeDisturbanceEstimateRmse?.toFixed(4) ?? 'n/a',
+    rho: mismatchDisturbanceObserver.config.estimation.disturbanceRetention?.toFixed(2) ?? 'n/a',
+  },
+]);
+console.log(`Observer/state-only IAE ratio: ${(mismatchDisturbanceObserver.metrics.iae / mismatchStateOnly.metrics.iae).toFixed(3)}`);
+console.log(`Observer/state-only solve ratio: ${(mismatchDisturbanceObserver.metrics.solveCount / Math.max(1, mismatchStateOnly.metrics.solveCount)).toFixed(3)}`);
