@@ -128,6 +128,7 @@ function metrics(samples, target, solverRecords, cfg) {
   const governorWidths = governorSamples.map((sample) => sample.governorIntervalWidth).filter(Number.isFinite);
   const governorInfeasibleCount = governorSamples.filter((sample) => sample.governorFeasible === false).length;
   const governorEmergencyCount = governorSamples.filter((sample) => sample.governorEmergencyFallback).length;
+  const governorContinuationCount = governorSamples.filter((sample) => sample.governorContinuationUsed).length;
 
   return {
     overshoot: Math.max(0, ((peak - target) / Math.max(Math.abs(target), 1e-9)) * 100),
@@ -166,6 +167,7 @@ function metrics(samples, target, solverRecords, cfg) {
     governorAvgIntervalWidth: average(governorWidths),
     governorInfeasibleCount,
     governorEmergencyCount,
+    governorContinuationRate: governorSamples.length ? 100 * governorContinuationCount / governorSamples.length : 0,
   };
 }
 
@@ -191,6 +193,7 @@ export function runSimulation(mode, userConfig = {}) {
   let lastSolveState = { ...state };
   let previousU = 0;
   let lastMpcSafeU = 0;
+  let lastMpcPlan = null;
   let lastSolve = -Infinity;
   let reference = cfg.setpoint;
   let warmStart = null;
@@ -208,6 +211,19 @@ export function runSimulation(mode, userConfig = {}) {
       fallbackReason: solution.fallbackReason || null,
       diagnostics: solution.diagnostics || null,
     });
+  }
+
+  function acceptMpcPlan(solution) {
+    if (solution.fallbackUsed) return;
+    lastMpcPlan = [...solution.sequence];
+    lastMpcSafeU = solution.u;
+  }
+
+  function shiftMpcPlan() {
+    if (!lastMpcPlan?.length) return;
+    const tail = lastMpcPlan[lastMpcPlan.length - 1];
+    lastMpcPlan = [...lastMpcPlan.slice(1), tail];
+    if (Number.isFinite(lastMpcPlan[0])) lastMpcSafeU = lastMpcPlan[0];
   }
 
   for (let k = 0; k <= steps; k += 1) {
@@ -240,7 +256,7 @@ export function runSimulation(mode, userConfig = {}) {
       const solution = solveMPC(state, cfg.setpoint, previousU, cfg, warmStart);
       u = solution.u;
       warmStart = solution.sequence;
-      if (!solution.fallbackUsed) lastMpcSafeU = solution.u;
+      acceptMpcPlan(solution);
       mpcCost = solution.cost;
       solverDiagnostics = solution.diagnostics || null;
       solverStatus = solution.status || null;
@@ -254,7 +270,7 @@ export function runSimulation(mode, userConfig = {}) {
         warmStart = solution.sequence;
         if (!solution.fallbackUsed) {
           reference = predictiveReference(solution, cfg.setpoint, cfg);
-          lastMpcSafeU = solution.u;
+          acceptMpcPlan(solution);
         }
         lastSolve = t;
         lastSolveState = { ...state };
@@ -268,7 +284,7 @@ export function runSimulation(mode, userConfig = {}) {
       }
 
       if (governorMode) {
-        const interval = computeAdmissibleCommandInterval(state, previousU, cfg);
+        const interval = computeAdmissibleCommandInterval(state, previousU, cfg, lastMpcPlan);
         const pidResult = pid.updateDetailed(reference, state.x, interval.feasible ? interval : null);
         pidRaw = pidResult.raw;
         pidNominal = clamp(pidResult.raw, cfg.pid.uMin, cfg.pid.uMax);
@@ -289,6 +305,7 @@ export function runSimulation(mode, userConfig = {}) {
             proposedU: pidNominal,
             previousU,
             lastMpcSafeU,
+            continuationSequence: lastMpcPlan,
             cfg,
           });
           u = governor.u;
@@ -328,6 +345,7 @@ export function runSimulation(mode, userConfig = {}) {
       governorCorrection: governor?.correction ?? 0,
       governorEmergencyFallback: governor?.emergencyFallback ?? false,
       governorReason: governor?.reason ?? null,
+      governorContinuationUsed: governor?.interval?.continuationUsed ?? false,
       governorIntervalLower: governor?.interval?.lower ?? null,
       governorIntervalUpper: governor?.interval?.upper ?? null,
       governorIntervalWidth: governor?.interval?.feasible && Number.isFinite(governor.interval.lower) && Number.isFinite(governor.interval.upper)
@@ -338,6 +356,7 @@ export function runSimulation(mode, userConfig = {}) {
     expectedState = stepSecondOrderPlant(state, u, 0, cfg);
     previousU = u;
     state = stepSecondOrderPlant(state, u, disturbance, cfg);
+    shiftMpcPlan();
   }
 
   return {
