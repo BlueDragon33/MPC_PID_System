@@ -10,7 +10,7 @@ export const defaultConfig = {
   plant: { stiffness: 1.45, gain: 1.0, damping: 0.82 },
   pid: { kp: 5.2, ki: 1.35, kd: 0.52, uMin: -4, uMax: 4, antiWindup: 0.5 },
   mpc: {
-    solver: SOLVER_BACKENDS.BOX_QP,
+    solver: SOLVER_BACKENDS.CONSTRAINED_QP,
     horizon: 35,
     qPosition: 9,
     qVelocity: 1.2,
@@ -19,11 +19,17 @@ export const defaultConfig = {
     terminalWeight: 8,
     iterations: 20,
     learningRate: 0.12,
-    qpIterations: 80,
-    qpTolerance: 1e-4,
-    qpStepScale: 0.98,
+    qpIterations: 60,
+    qpTolerance: 5e-4,
+    qpStepScale: 0.95,
+    qpProjectionCycles: 6,
+    qpProjectionTolerance: 1e-9,
+    qpFeasibilityTolerance: 1e-7,
+    qpTimeBudgetMs: 0,
     uMin: -4,
     uMax: 4,
+    deltaUMin: -0.65,
+    deltaUMax: 0.65,
     referenceLead: 0.5,
     velocityDamping: 0.08,
     maxReferenceLead: 0.4,
@@ -70,10 +76,15 @@ function metrics(samples, target, solverRecords) {
   const totalSolveMs = solverTimes.reduce((a, b) => a + b, 0);
   const diagnostics = solverRecords.map((record) => record.diagnostics).filter(Boolean);
   const convergenceDiagnostics = diagnostics.filter((item) => typeof item.converged === 'boolean');
-  const kktValues = diagnostics.map((item) => item.kktResidual).filter(Number.isFinite);
+  const residualValues = diagnostics
+    .map((item) => item.projectedGradientResidual ?? item.kktResidual)
+    .filter(Number.isFinite);
   const feasibilityValues = diagnostics.map((item) => item.feasibilityViolation).filter(Number.isFinite);
   const iterationValues = diagnostics.map((item) => item.iterations).filter(Number.isFinite);
   const activeRatios = diagnostics.map((item) => item.activeConstraintRatio).filter(Number.isFinite);
+  const statuses = solverRecords.map((record) => record.status).filter(Boolean);
+  const fallbackCount = solverRecords.filter((record) => record.fallbackUsed).length;
+  const approximateCount = diagnostics.filter((item) => item.acceptedApproximate).length;
 
   return {
     overshoot: Math.max(0, ((peak - target) / Math.max(Math.abs(target), 1e-9)) * 100),
@@ -90,10 +101,16 @@ function metrics(samples, target, solverRecords) {
       ? 100 * convergenceDiagnostics.filter((item) => item.converged).length / convergenceDiagnostics.length
       : null,
     avgIterations: average(iterationValues),
-    avgKktResidual: average(kktValues),
-    maxKktResidual: kktValues.length ? Math.max(...kktValues) : null,
+    avgStationarityResidual: average(residualValues),
+    maxStationarityResidual: residualValues.length ? Math.max(...residualValues) : null,
     maxFeasibilityViolation: feasibilityValues.length ? Math.max(...feasibilityValues) : null,
     avgActiveConstraintRatio: average(activeRatios),
+    fallbackCount,
+    fallbackRate: solveCount ? 100 * fallbackCount / solveCount : 0,
+    approximateCount,
+    timeoutCount: statuses.filter((status) => status === 'timeout').length,
+    infeasibleCount: statuses.filter((status) => status === 'infeasible').length,
+    numericalFailureCount: statuses.filter((status) => status === 'numerical-failure').length,
   };
 }
 
@@ -127,6 +144,9 @@ export function runSimulation(mode, userConfig = {}) {
     solverRecords.push({
       solveMs: solution.solveMs,
       solver: solution.solver,
+      status: solution.status || (solution.diagnostics?.converged ? 'solved' : null),
+      fallbackUsed: Boolean(solution.fallbackUsed),
+      fallbackReason: solution.fallbackReason || null,
       diagnostics: solution.diagnostics || null,
     });
   }
@@ -149,6 +169,8 @@ export function runSimulation(mode, userConfig = {}) {
     let triggerReason = '';
     let mpcCost = null;
     let solverDiagnostics = null;
+    let solverStatus = null;
+    let fallbackUsed = false;
 
     if (mode === 'PID') {
       u = pid.update(cfg.setpoint, state.x);
@@ -158,17 +180,21 @@ export function runSimulation(mode, userConfig = {}) {
       warmStart = solution.sequence;
       mpcCost = solution.cost;
       solverDiagnostics = solution.diagnostics || null;
+      solverStatus = solution.status || null;
+      fallbackUsed = Boolean(solution.fallbackUsed);
       recordSolution(solution);
       triggered = true;
       triggerReason = 'periodic';
     } else if (event.triggered) {
       const solution = solveMPC(state, cfg.setpoint, previousU, cfg, warmStart);
       warmStart = solution.sequence;
-      reference = predictiveReference(solution, cfg.setpoint, cfg);
+      if (!solution.fallbackUsed) reference = predictiveReference(solution, cfg.setpoint, cfg);
       lastSolve = t;
       lastSolveState = { ...state };
       mpcCost = solution.cost;
       solverDiagnostics = solution.diagnostics || null;
+      solverStatus = solution.status || null;
+      fallbackUsed = Boolean(solution.fallbackUsed);
       recordSolution(solution);
       triggered = true;
       triggerReason = event.reason;
@@ -191,9 +217,11 @@ export function runSimulation(mode, userConfig = {}) {
       triggered,
       triggerReason,
       mpcCost,
+      solverStatus,
+      fallbackUsed,
       solverConverged: solverDiagnostics?.converged ?? null,
       solverIterations: solverDiagnostics?.iterations ?? null,
-      kktResidual: solverDiagnostics?.kktResidual ?? null,
+      stationarityResidual: solverDiagnostics?.projectedGradientResidual ?? solverDiagnostics?.kktResidual ?? null,
       feasibilityViolation: solverDiagnostics?.feasibilityViolation ?? null,
       activeConstraintRatio: solverDiagnostics?.activeConstraintRatio ?? null,
     });
