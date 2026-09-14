@@ -26,6 +26,18 @@ export function createTruthPlantConfig(cfg) {
   };
 }
 
+export function equivalentDisturbance(state, u, externalDisturbance, nominalCfg, truthCfg) {
+  const nominal = createSecondOrderModel(nominalCfg);
+  const truth = createSecondOrderModel(truthCfg);
+  const e = truth.E[1];
+  if (!Number.isFinite(e) || Math.abs(e) < 1e-12) return externalDisturbance;
+  const residualVelocityIncrement =
+    (truth.A[1][0] - nominal.A[1][0]) * state.x
+    + (truth.A[1][1] - nominal.A[1][1]) * state.v
+    + (truth.B[1] - nominal.B[1]) * u;
+  return externalDisturbance + residualVelocityIncrement / e;
+}
+
 export function stepSecondOrderPlant(state, u, disturbance, cfg) {
   const { A, B, E } = createSecondOrderModel(cfg);
   return {
