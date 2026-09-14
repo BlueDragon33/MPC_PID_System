@@ -185,7 +185,7 @@ export const EXPERIMENT_PRESETS = [
   {
     id: 'mismatch-observer',
     label: 'Model mismatch · d̂ observer',
-    description: 'Same truth/model mismatch, but an augmented Kalman state estimates the equivalent disturbance d̂ without yet feeding it into MPC prediction.',
+    description: 'Same truth/model mismatch with a retention-tuned augmented disturbance state; d̂ remains observer-only until prediction compensation is benchmarked.',
     patch: {
       truthPlant: {
         enabled: true,
@@ -205,7 +205,8 @@ export const EXPERIMENT_PRESETS = [
         constraintSigma: 1.5,
         disturbanceStateEnabled: true,
         disturbanceProcessVariance: 8e-3,
-        initialDisturbanceVariance: 0.8,
+        initialDisturbanceVariance: 0.2,
+        disturbanceRetention: 0.90,
       },
       safety: { previewHorizon: 8, positionMargin: 0.01, velocityMargin: 0.02, outputMargin: 0.01 },
       mpc: {
