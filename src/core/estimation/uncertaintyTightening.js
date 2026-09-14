@@ -2,7 +2,7 @@ const finiteNonNegative = (value) => Number.isFinite(value) ? Math.max(0, value)
 
 export function covarianceSigmas(covariance, C = [1, 0]) {
   const P = covariance;
-  if (!Array.isArray(P) || P.length !== 2 || !Array.isArray(P[0]) || !Array.isArray(P[1])) {
+  if (!Array.isArray(P) || P.length < 2 || !Array.isArray(P[0]) || !Array.isArray(P[1]) || P[0].length < 2 || P[1].length < 2) {
     return { positionSigma: 0, velocitySigma: 0, outputSigma: 0, valid: false };
   }
 
