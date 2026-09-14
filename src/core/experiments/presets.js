@@ -94,7 +94,7 @@ export const EXPERIMENT_PRESETS = [
   {
     id: 'noisy-estimation',
     label: 'Kalman noisy sensor',
-    description: 'Closed-loop hybrid uses only the Kalman state estimate while truth remains available solely for RMSE and safety auditing.',
+    description: 'Closed-loop hybrid uses only the Kalman estimate and tightens state/output constraints from estimator covariance.',
     patch: {
       estimation: {
         enabled: true,
@@ -103,8 +103,10 @@ export const EXPERIMENT_PRESETS = [
         seed: 20260914,
         processPositionVariance: 2e-5,
         processVelocityVariance: 2e-4,
-        initialPositionVariance: 0.25,
-        initialVelocityVariance: 0.8,
+        initialPositionVariance: 0.04,
+        initialVelocityVariance: 0.06,
+        constraintTighteningEnabled: true,
+        constraintSigma: 2.0,
       },
       safety: {
         previewHorizon: 8,
