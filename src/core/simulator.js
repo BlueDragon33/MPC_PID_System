@@ -5,17 +5,19 @@ export const defaultConfig = {
   plant: { stiffness: 1.45, gain: 1.0, damping: 0.82 },
   pid: { kp: 5.2, ki: 1.35, kd: 0.52, uMin: -4, uMax: 4, antiWindup: 0.5 },
   mpc: {
-    horizon: 22,
+    horizon: 35,
     qPosition: 9,
     qVelocity: 1.2,
     rInput: 0.16,
     rDelta: 0.12,
-    terminalWeight: 2.5,
-    iterations: 28,
+    terminalWeight: 8,
+    iterations: 20,
     learningRate: 0.12,
     uMin: -4,
     uMax: 4,
-    previewSteps: 6,
+    referenceLead: 0.5,
+    velocityDamping: 0.08,
+    maxReferenceLead: 0.4,
   },
   trigger: {
     predictionError: 0.035,
@@ -155,6 +157,13 @@ function solveMPC(state, target, previousU, cfg, warmStart = null) {
   };
 }
 
+function predictiveReference(solution, target, cfg) {
+  const future = solution.path[solution.path.length - 1] ?? { x: target, v: 0 };
+  const rawLead = cfg.mpc.referenceLead * (target - future.x) - cfg.mpc.velocityDamping * future.v;
+  const lead = clamp(rawLead, -cfg.mpc.maxReferenceLead, cfg.mpc.maxReferenceLead);
+  return target + lead;
+}
+
 function normalizedDistance(a, b, trigger) {
   const dx = (a.x - b.x) / Math.max(trigger.positionScale, 1e-9);
   const dv = (a.v - b.v) / Math.max(trigger.velocityScale, 1e-9);
@@ -208,8 +217,6 @@ export function runSimulation(mode, userConfig = {}) {
   let lastSolve = -Infinity;
   let reference = cfg.setpoint;
   let warmStart = null;
-  let cachedPath = [];
-  let cachedPathIndex = 0;
   const solverTimes = [];
   const samples = [];
 
@@ -245,18 +252,13 @@ export function runSimulation(mode, userConfig = {}) {
       if (mustSolve) {
         const solution = solveMPC(state, cfg.setpoint, previousU, cfg, warmStart);
         warmStart = solution.sequence;
-        cachedPath = solution.path;
-        cachedPathIndex = Math.min(cfg.mpc.previewSteps, Math.max(0, cachedPath.length - 1));
-        reference = cachedPath[cachedPathIndex]?.x ?? cfg.setpoint;
+        reference = predictiveReference(solution, cfg.setpoint, cfg);
         lastSolve = t;
         lastSolveState = { ...state };
         solverTimes.push(solution.solveMs);
         mpcCost = solution.cost;
         triggered = true;
         triggerReason = k === 0 ? 'initial' : watchdog ? 'watchdog' : predictionEvent ? 'prediction-error' : constraintEvent ? 'constraint' : 'state-change';
-      } else if (cachedPath.length) {
-        cachedPathIndex = Math.min(cachedPathIndex + 1, cachedPath.length - 1);
-        reference = cachedPath[cachedPathIndex]?.x ?? reference;
       }
 
       u = pid.update(reference, state.x);
