@@ -61,9 +61,10 @@ console.table([
 ]);
 
 const augmentedFailures = augmented.solverRecords
-  .filter((record) => record.fallbackUsed || record.status !== 'solved')
-  .map((record, index) => ({
-    index,
+  .map((record, solveIndex) => ({ record, solveIndex }))
+  .filter(({ record }) => record.fallbackUsed || record.status !== 'solved')
+  .map(({ record, solveIndex }) => ({
+    solveIndex,
     status: record.status,
     fallback: record.fallbackUsed,
     reason: record.fallbackReason ?? '',
@@ -75,6 +76,28 @@ const augmentedFailures = augmented.solverRecords
 if (augmentedFailures.length) {
   console.log('Augmented observer non-solved/fallback MPC calls');
   console.table(augmentedFailures);
+}
+
+const fallbackSamples = augmented.samples
+  .filter((sample) => sample.triggered && sample.fallbackUsed)
+  .map((sample) => ({
+    t: sample.t.toFixed(3),
+    reason: sample.triggerReason,
+    xHat: sample.controllerX.toFixed(4),
+    vHat: sample.controllerV.toFixed(4),
+    dHat: sample.estimateD?.toFixed(4) ?? '—',
+    dEq: sample.equivalentDisturbance.toFixed(4),
+    xTruth: sample.x.toFixed(4),
+    vTruth: sample.v.toFixed(4),
+    uApplied: sample.u.toFixed(4),
+    pidConditioned: sample.pidConditioned?.toFixed(4) ?? '—',
+    'Δv margin': sample.uncertaintyVelocityMargin.toFixed(4),
+    solverStatus: sample.solverStatus,
+    safetyViolation: sample.safetyViolation.toExponential(2),
+  }));
+if (fallbackSamples.length) {
+  console.log('Fallback samples in closed-loop timeline');
+  console.table(fallbackSamples);
 }
 
 assert(stateOnly.metrics.truthPlantMismatchEnabled, 'State-only case did not activate truth/model mismatch.');
