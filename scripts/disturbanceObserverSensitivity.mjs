@@ -1,7 +1,7 @@
 import { defaultConfig, runSimulation } from '../src/core/simulator.js';
 import { applyExperimentPreset } from '../src/core/experiments/presets.js';
 
-function scenario(qd, pd) {
+function scenario(qd, rho) {
   const preset = applyExperimentPreset(defaultConfig, 'mismatch-observer');
   return {
     ...preset,
@@ -9,7 +9,8 @@ function scenario(qd, pd) {
     estimation: {
       ...preset.estimation,
       disturbanceProcessVariance: qd,
-      initialDisturbanceVariance: pd,
+      initialDisturbanceVariance: 0.2,
+      disturbanceRetention: rho,
     },
     disturbance: {
       ...preset.disturbance,
@@ -29,13 +30,13 @@ function scenario(qd, pd) {
 }
 
 const candidates = [];
-for (const qd of [0.008, 0.016, 0.032, 0.064]) {
-  for (const pd of [0.05, 0.2]) candidates.push({ qd, pd });
+for (const qd of [0.008, 0.016]) {
+  for (const rho of [1.0, 0.995, 0.98, 0.95, 0.9]) candidates.push({ qd, rho });
 }
 
 const pulseEnd = 2.25;
-const rows = candidates.map(({ qd, pd }) => {
-  const result = runSimulation('HYBRID_SAFE', scenario(qd, pd));
+const rows = candidates.map(({ qd, rho }) => {
+  const result = runSimulation('HYBRID_SAFE', scenario(qd, rho));
   const m = result.metrics;
   const reversalWindow = result.samples.filter((sample) => sample.t >= pulseEnd && sample.t <= 2.9 && sample.disturbanceEstimateEnabled);
   const signMismatchSamples = reversalWindow.filter((sample) => sample.equivalentDisturbance < -0.05 && sample.estimateD > 0);
@@ -43,7 +44,7 @@ const rows = candidates.map(({ qd, pd }) => {
   const sample240 = result.samples.find((sample) => Math.abs(sample.t - 2.4) < 1e-9);
   return {
     Qd: qd.toExponential(1),
-    Pd0: pd.toFixed(2),
+    rho: rho.toFixed(3),
     IAE: m.iae.toFixed(4),
     solves: m.solveCount,
     'conv %': m.convergenceRate == null ? 'n/a' : m.convergenceRate.toFixed(1),
@@ -62,5 +63,5 @@ const rows = candidates.map(({ qd, pd }) => {
   };
 });
 
-console.log('Disturbance-observer sign-reversal sensitivity under model mismatch');
+console.log('Disturbance-observer retention sensitivity under model mismatch');
 console.table(rows);
