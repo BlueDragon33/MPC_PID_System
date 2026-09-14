@@ -1,7 +1,7 @@
 import React from 'react';
 import { Radar } from 'lucide-react';
 
-function NumberField({ label, value, step = 0.01, min = null, onChange }) {
+function NumberField({ label, value, step = 0.01, min = null, max = null, onChange }) {
   return (
     <label className="field">
       <span>{label}</span>
@@ -10,6 +10,7 @@ function NumberField({ label, value, step = 0.01, min = null, onChange }) {
         value={value}
         step={step}
         min={min ?? undefined}
+        max={max ?? undefined}
         onChange={(event) => onChange(Number(event.target.value))}
       />
     </label>
@@ -53,8 +54,9 @@ export default function EstimationPanel({ cfg, setCfg }) {
           {estimation.disturbanceStateEnabled && <>
             <NumberField label="Q disturbance" value={estimation.disturbanceProcessVariance} step={0.001} min={0} onChange={(value) => update('disturbanceProcessVariance', Math.max(0, value))} />
             <NumberField label="Initial P disturbance" value={estimation.initialDisturbanceVariance} step={0.05} min={0} onChange={(value) => update('initialDisturbanceVariance', Math.max(0, value))} />
+            <NumberField label="Disturbance retention ρd" value={estimation.disturbanceRetention ?? 1} step={0.01} min={0} max={1} onChange={(value) => update('disturbanceRetention', Math.max(0, Math.min(1, value)))} />
           </>}
-          <p className="estimation-note">Hiện d̂ chỉ được quan sát và chấm against equivalent model residual; chưa feed-forward vào MPC prediction để tránh kết luận trước benchmark.</p>
+          <p className="estimation-note">d̂ dùng mô hình d[k+1]=ρd·d[k]+w. ρd nhỏ hơn 1 giúp residual cũ phai dần; d̂ hiện vẫn chỉ được quan sát, chưa feed-forward vào MPC prediction.</p>
         </div>
 
         <div className="estimation-subsection">
