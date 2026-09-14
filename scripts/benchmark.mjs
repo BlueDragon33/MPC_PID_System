@@ -6,11 +6,14 @@ const cases = [
   ...[SOLVER_BACKENDS.CONSTRAINED_QP, SOLVER_BACKENDS.BOX_QP, SOLVER_BACKENDS.PROJECTED_GRADIENT]
     .map((backend) => ({ preset: 'baseline', mode: 'MPC', backend })),
   { preset: 'baseline', mode: 'HYBRID', backend: SOLVER_BACKENDS.CONSTRAINED_QP },
+  { preset: 'baseline', mode: 'HYBRID_SAFE', backend: SOLVER_BACKENDS.CONSTRAINED_QP },
   { preset: 'rate-limited', mode: 'MPC', backend: SOLVER_BACKENDS.CONSTRAINED_QP },
   { preset: 'safety-envelope', mode: 'MPC', backend: SOLVER_BACKENDS.CONSTRAINED_QP },
   { preset: 'safety-envelope', mode: 'HYBRID', backend: SOLVER_BACKENDS.CONSTRAINED_QP },
+  { preset: 'safety-envelope', mode: 'HYBRID_SAFE', backend: SOLVER_BACKENDS.CONSTRAINED_QP },
   { preset: 'safety-envelope', mode: 'HYBRID', backend: SOLVER_BACKENDS.BOX_QP },
   { preset: 'disturbance-stress', mode: 'HYBRID', backend: SOLVER_BACKENDS.CONSTRAINED_QP },
+  { preset: 'disturbance-stress', mode: 'HYBRID_SAFE', backend: SOLVER_BACKENDS.CONSTRAINED_QP },
 ];
 
 const rows = [];
@@ -19,6 +22,11 @@ for (const item of cases) {
   const config = {
     ...presetConfig,
     duration: Math.min(2.0, presetConfig.duration),
+    safety: {
+      ...defaultConfig.safety,
+      ...(presetConfig.safety || {}),
+      previewHorizon: 8,
+    },
     mpc: {
       ...presetConfig.mpc,
       solver: item.backend,
@@ -40,6 +48,9 @@ for (const item of cases) {
     maxQPViolation: result.metrics.maxFeasibilityViolation,
     actualSafetyViolation: result.metrics.maxActualSafetyViolation,
     safetyViolationRate: result.metrics.safetyViolationRate,
+    governorInterventionRate: result.metrics.governorInterventionRate,
+    governorMaxCorrection: result.metrics.governorMaxCorrection,
+    governorEmergencyCount: result.metrics.governorEmergencyCount,
   });
 }
 
@@ -57,13 +68,18 @@ console.table(rows.map((row) => ({
   'QP viol': row.maxQPViolation == null ? 'n/a' : row.maxQPViolation.toExponential(2),
   'plant safety': row.actualSafetyViolation.toExponential(2),
   'unsafe %': row.safetyViolationRate.toFixed(1),
+  'gov %': row.governorInterventionRate.toFixed(1),
+  'gov max Δu': row.governorMaxCorrection.toFixed(3),
+  emergency: row.governorEmergencyCount,
 })));
 
 const constrainedSafetyMpc = rows.find((row) => row.preset === 'safety-envelope' && row.mode === 'MPC' && row.backend === SOLVER_BACKENDS.CONSTRAINED_QP);
 const constrainedSafetyHybrid = rows.find((row) => row.preset === 'safety-envelope' && row.mode === 'HYBRID' && row.backend === SOLVER_BACKENDS.CONSTRAINED_QP);
-if (constrainedSafetyMpc && constrainedSafetyHybrid) {
+const constrainedSafetyGoverned = rows.find((row) => row.preset === 'safety-envelope' && row.mode === 'HYBRID_SAFE' && row.backend === SOLVER_BACKENDS.CONSTRAINED_QP);
+if (constrainedSafetyMpc && constrainedSafetyHybrid && constrainedSafetyGoverned) {
   console.log('\nSafety authority comparison');
   console.log(`Periodic constrained MPC plant violation: ${constrainedSafetyMpc.actualSafetyViolation.toExponential(3)}`);
   console.log(`Hybrid guidance-only plant violation:      ${constrainedSafetyHybrid.actualSafetyViolation.toExponential(3)}`);
-  console.log('A non-zero hybrid gap is evidence for adding a Safety Governor / admissibility filter rather than assuming predicted feasibility automatically transfers through PID.');
+  console.log(`Hybrid + Safety Governor violation:        ${constrainedSafetyGoverned.actualSafetyViolation.toExponential(3)}`);
+  console.log(`Governor intervention rate:                ${constrainedSafetyGoverned.governorInterventionRate.toFixed(1)}%`);
 }
