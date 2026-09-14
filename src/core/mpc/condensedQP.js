@@ -37,6 +37,10 @@ function scaleVector(v, scalar) {
   return v.map((value) => value * scalar);
 }
 
+function dot(a, b) {
+  return a.reduce((sum, value, i) => sum + value * b[i], 0);
+}
+
 function matrixPowers(A, maxPower) {
   const powers = [identity(A.length)];
   for (let k = 1; k <= maxPower; k += 1) powers.push(matMul(powers[k - 1], A));
@@ -138,6 +142,11 @@ export function buildCondensedQP({ A, B, state, target, previousU, cfg }) {
     freePrediction,
     form: '0.5 * U^T H U + f^T U',
   };
+}
+
+export function evaluateCondensedQP(qp, U) {
+  const HU = matVec(qp.H, U);
+  return 0.5 * dot(U, HU) + dot(qp.f, U);
 }
 
 export function qpDiagnostics(qp) {
