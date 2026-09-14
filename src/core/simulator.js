@@ -1,6 +1,10 @@
 import { createPIDController } from './controllers/pid.js';
 import { createSecondOrderModel, disturbanceAt, stepSecondOrderPlant } from './models/secondOrderPlant.js';
-import { computeAdmissibleCommandInterval, applySafetyGovernor } from './safety/shortHorizonGovernor.js';
+import {
+  computeAdmissibleCommandInterval,
+  computePhysicalCommandInterval,
+  applySafetyGovernor,
+} from './safety/shortHorizonGovernor.js';
 import { solveMPC, SOLVER_BACKENDS } from './solvers/index.js';
 import { evaluateEventTrigger } from './triggers/eventTrigger.js';
 
@@ -122,9 +126,12 @@ function metrics(samples, target, solverRecords, cfg) {
     const active = item.activeByKind || {};
     return Object.keys(active).some((key) => (key.startsWith('state-') || key.startsWith('output-')) && active[key] > 0);
   }).length;
+
   const governorSamples = samples.filter((sample) => sample.governorEnabled);
-  const governorInterventions = governorSamples.filter((sample) => sample.governorIntervened);
-  const governorCorrections = governorSamples.map((sample) => Math.abs(sample.governorCorrection || 0));
+  const safetyInterventions = governorSamples.filter((sample) => sample.governorSafetyIntervened);
+  const conditioningInterventions = governorSamples.filter((sample) => sample.governorConditioned);
+  const safetyCorrections = governorSamples.map((sample) => Math.abs(sample.governorCorrection || 0));
+  const conditioningCorrections = governorSamples.map((sample) => Math.abs(sample.governorConditioningCorrection || 0));
   const governorWidths = governorSamples.map((sample) => sample.governorIntervalWidth).filter(Number.isFinite);
   const governorInfeasibleCount = governorSamples.filter((sample) => sample.governorFeasible === false).length;
   const governorEmergencyCount = governorSamples.filter((sample) => sample.governorEmergencyFallback).length;
@@ -160,10 +167,14 @@ function metrics(samples, target, solverRecords, cfg) {
     safetyViolationRate: samples.length ? 100 * safetyViolationCount / samples.length : 0,
     stateConstraintActiveSolveRate: solveCount ? 100 * stateActiveSolves / solveCount : 0,
     governorEnabled: governorSamples.length > 0,
-    governorInterventionCount: governorInterventions.length,
-    governorInterventionRate: governorSamples.length ? 100 * governorInterventions.length / governorSamples.length : 0,
-    governorAvgCorrection: average(governorCorrections),
-    governorMaxCorrection: governorCorrections.length ? Math.max(...governorCorrections) : 0,
+    governorInterventionCount: safetyInterventions.length,
+    governorInterventionRate: governorSamples.length ? 100 * safetyInterventions.length / governorSamples.length : 0,
+    governorAvgCorrection: average(safetyCorrections),
+    governorMaxCorrection: safetyCorrections.length ? Math.max(...safetyCorrections) : 0,
+    governorConditioningCount: conditioningInterventions.length,
+    governorConditioningRate: governorSamples.length ? 100 * conditioningInterventions.length / governorSamples.length : 0,
+    governorAvgConditioningCorrection: average(conditioningCorrections),
+    governorMaxConditioningCorrection: conditioningCorrections.length ? Math.max(...conditioningCorrections) : 0,
     governorAvgIntervalWidth: average(governorWidths),
     governorInfeasibleCount,
     governorEmergencyCount,
@@ -249,6 +260,7 @@ export function runSimulation(mode, userConfig = {}) {
     let governor = null;
     let pidRaw = null;
     let pidNominal = null;
+    let pidConditioned = null;
 
     if (mode === 'PID') {
       u = pid.update(cfg.setpoint, state.x);
@@ -285,29 +297,48 @@ export function runSimulation(mode, userConfig = {}) {
 
       if (governorMode) {
         const interval = computeAdmissibleCommandInterval(state, previousU, cfg, lastMpcPlan);
+        const baseInterval = interval.baseInterval ?? computePhysicalCommandInterval(previousU, cfg);
         const pidResult = pid.updateDetailed(reference, state.x, interval.feasible ? interval : null);
         pidRaw = pidResult.raw;
         pidNominal = clamp(pidResult.raw, cfg.pid.uMin, cfg.pid.uMax);
+        pidConditioned = baseInterval.feasible
+          ? clamp(pidNominal, baseInterval.lower, baseInterval.upper)
+          : pidNominal;
+        const conditioningCorrection = pidConditioned - pidNominal;
 
         if (interval.feasible) {
           u = pidResult.u;
+          const safetyCorrection = u - pidConditioned;
           governor = {
             feasible: true,
             emergencyFallback: false,
-            intervened: Math.abs(u - pidNominal) > 1e-12,
-            correction: u - pidNominal,
-            reason: Math.abs(u - pidNominal) > 1e-12 ? 'pid-limited-by-admissible-interval' : 'proposal-admissible',
+            intervened: Math.abs(safetyCorrection) > 1e-12,
+            conditioned: Math.abs(conditioningCorrection) > 1e-12,
+            correction: safetyCorrection,
+            conditioningCorrection,
+            reason: Math.abs(safetyCorrection) > 1e-12
+              ? 'safety-envelope-limited-command'
+              : Math.abs(conditioningCorrection) > 1e-12
+                ? 'actuator-plan-conditioned-command'
+                : 'proposal-admissible',
             interval,
           };
         } else {
           governor = applySafetyGovernor({
             state,
-            proposedU: pidNominal,
+            proposedU: pidConditioned,
             previousU,
             lastMpcSafeU,
             continuationSequence: lastMpcPlan,
             cfg,
           });
+          governor = {
+            ...governor,
+            intervened: true,
+            conditioned: Math.abs(conditioningCorrection) > 1e-12,
+            correction: governor.u - pidConditioned,
+            conditioningCorrection,
+          };
           u = governor.u;
         }
       } else {
@@ -339,10 +370,14 @@ export function runSimulation(mode, userConfig = {}) {
       safetyViolation: safetyViolationAt(state, cfg),
       pidRaw,
       pidNominal,
+      pidConditioned,
       governorEnabled: governorMode,
       governorFeasible: governor?.feasible ?? null,
       governorIntervened: governor?.intervened ?? false,
+      governorSafetyIntervened: governor?.intervened ?? false,
+      governorConditioned: governor?.conditioned ?? false,
       governorCorrection: governor?.correction ?? 0,
+      governorConditioningCorrection: governor?.conditioningCorrection ?? 0,
       governorEmergencyFallback: governor?.emergencyFallback ?? false,
       governorReason: governor?.reason ?? null,
       governorContinuationUsed: governor?.interval?.continuationUsed ?? false,
