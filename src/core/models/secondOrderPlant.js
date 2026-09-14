@@ -12,6 +12,20 @@ export function createSecondOrderModel(cfg) {
   };
 }
 
+export function createTruthPlantConfig(cfg) {
+  const mismatch = cfg.truthPlant;
+  if (!mismatch?.enabled) return cfg;
+  return {
+    ...cfg,
+    plant: {
+      ...cfg.plant,
+      stiffness: cfg.plant.stiffness * (Number.isFinite(mismatch.stiffnessScale) ? mismatch.stiffnessScale : 1),
+      damping: cfg.plant.damping * (Number.isFinite(mismatch.dampingScale) ? mismatch.dampingScale : 1),
+      gain: cfg.plant.gain * (Number.isFinite(mismatch.gainScale) ? mismatch.gainScale : 1),
+    },
+  };
+}
+
 export function stepSecondOrderPlant(state, u, disturbance, cfg) {
   const { A, B, E } = createSecondOrderModel(cfg);
   return {
