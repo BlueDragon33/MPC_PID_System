@@ -28,7 +28,7 @@ Reference / Planner
       Sensor
 ```
 
-## V0.3 hiện tại — QP Core
+## V0.3B hiện tại — General Constrained MPC
 
 - React + Vite research web-app.
 - Plant rời rạc dạng state-space với trạng thái `[position, velocity]ᵀ`.
@@ -40,39 +40,59 @@ Reference / Planner
 X = Φ x₀ + Γ U
 ```
 
-- Quadratic objective ở dạng:
+- Quadratic objective:
 
 ```text
 min  0.5 Uᵀ H U + fᵀ U
 ```
 
-- Hai solver backend:
-  - `box-qp`: solver chính cho convex QP với hard input bounds.
-  - `projected-gradient`: baseline/fallback để benchmark.
-- Box-QP dùng warm-start, accelerated projected steps và monotone restart.
+- Constraint representation thống nhất:
+
+```text
+A U <= b
+```
+
+bao gồm:
+- hard input bounds `uMin <= u(k) <= uMax`,
+- hard slew-rate bounds `ΔuMin <= u(k)-u(k-1) <= ΔuMax`.
+
+- Ba solver backend:
+  - `constrained-qp`: solver mặc định cho polyhedral input/rate constraints,
+  - `box-qp`: baseline QP cho hard input bounds,
+  - `projected-gradient`: legacy research baseline.
+- `constrained-qp` dùng warm-start, accelerated projected gradient và sparse Dykstra projection lên giao các half-space.
+- Explicit solver status:
+  - `solved`,
+  - `max-iterations` nhưng feasible/approximate,
+  - `timeout`,
+  - `infeasible`,
+  - `numerical-failure`.
+- Fallback semantics: timeout/infeasible/numerical failure không được âm thầm tạo guidance mới cho hybrid PID.
 - Diagnostics cho từng lần solve:
   - convergence status,
   - iteration count,
-  - KKT residual,
+  - projected-gradient/KKT-style stationarity residual,
   - feasibility violation,
-  - active lower/upper bounds,
-  - active constraint ratio,
-  - solver time.
-- Hybrid MPC → PID dùng **predictive reference shaping**: MPC dự đoán sai số tương lai rồi tạo setpoint dẫn trước có giới hạn cho PID.
+  - active input/rate inequalities,
+  - projection cycles,
+  - solver time,
+  - fallback status.
+- Hybrid MPC → PID dùng **predictive reference shaping**.
 - Event trigger dựa trên model prediction error, normalized state change, actuator constraint proximity và watchdog timeout.
 - Disturbance injection chỉ tác động lên plant thật; MPC dùng model danh định.
-- Dashboard hiển thị response, trigger timeline, compute reduction và solver-health metrics.
+- Dashboard hiển thị response, trigger timeline, compute reduction, hard constraints và solver-health metrics.
 - Smoke test kiểm tra:
   - state/control hữu hạn,
   - event-trigger giảm số lần solve,
   - condensed QP khớp rollout objective,
   - Hessian đối xứng,
   - hard input bounds,
-  - feasibility,
-  - KKT residual.
+  - hard `Δu`,
+  - independent `AU<=b` feasibility check,
+  - explicit infeasibility/fallback semantics.
 - GitHub Actions CI chạy control-core smoke test + production build.
 
-> V0.3 hiện đã có **QP backend thực cho bài toán convex có box input constraints**, nhưng chưa phải generic industrial QP stack. Hard slew-rate constraints `Δu`, state/output inequalities và OSQP/WASM backend vẫn là các gate tiếp theo.
+> V0.3B đã vượt khỏi box-only MPC. Bước kế tiếp không phải Kalman ngay: cần hoàn thiện **state/output inequalities**, reproducible experiment presets và benchmark backend trước khi đóng toàn bộ Gate QP.
 
 ## Cấu trúc lõi
 
@@ -84,9 +104,11 @@ src/core/
 │   └── pid.js
 ├── mpc/
 │   ├── condensedQP.js
+│   ├── constraints.js
 │   └── rollout.js
 ├── solvers/
 │   ├── index.js
+│   ├── constrainedQPMPC.js
 │   ├── boxQPMPC.js
 │   └── projectedGradientMPC.js
 ├── triggers/
@@ -94,7 +116,7 @@ src/core/
 └── simulator.js
 ```
 
-`simulator.js` chỉ đóng vai trò orchestration. Plant, controller, QP formulation, solver và trigger policy được tách độc lập để sau này thay backend, thêm Kalman Filter hoặc chuyển sang UAV/UGV/USV mà không phải viết lại toàn bộ hệ thống.
+`simulator.js` chỉ đóng vai trò orchestration. Plant, controller, QP formulation, constraints, solver và trigger policy được tách độc lập để sau này thay backend, thêm Kalman Filter hoặc chuyển sang UAV/UGV/USV mà không viết lại toàn bộ hệ thống.
 
 ## Research gates
 
@@ -108,18 +130,25 @@ src/core/
 
 ### Gate B1 — Condensed QP + box constraints — PASS
 - Prediction matrices `Φ`, `Γ`.
-- `H`, `f` và input bounds.
+- `H`, `f` và hard input bounds.
 - Solver adapter.
 - Box-QP backend.
-- KKT/feasibility/convergence diagnostics.
-- Regression test giữa condensed objective và rollout objective.
+- Optimality/feasibility diagnostics.
+- Regression test condensed objective ↔ rollout objective.
 
-### Gate B2 — General constrained MPC — NEXT
-- Hard `Δu` / slew-rate constraints.
-- State/output inequalities.
-- Explicit infeasibility handling.
-- Benchmark box-QP vs external QP backend.
-- Reproducible experiment presets.
+### Gate B2 — General constrained MPC — PARTIAL PASS
+Đã có:
+- generic `AU <= b` representation,
+- hard `Δu` / slew-rate constraints,
+- sparse polyhedral projection,
+- explicit timeout/infeasible/numerical-failure status,
+- safe fallback semantics.
+
+Còn thiếu trước khi đóng Gate B2:
+- state/output inequalities,
+- reproducible experiment presets,
+- backend benchmark suite,
+- deadline/failure scenario regression tests mở rộng.
 
 ### Gate C — State estimation
 - Observer / Kalman Filter.
@@ -151,14 +180,15 @@ Chi tiết định hướng và tiêu chí PASS/FAIL nằm trong [`docs/RESEARCH
 
 ## Nguyên tắc kiến trúc
 
-1. PID không bị loại bỏ; PID giữ vòng phản xạ nhanh khi nó là lựa chọn phù hợp.
-2. MPC chỉ được dùng ở nơi prediction, multivariable coupling hoặc constraints mang lại giá trị.
-3. MPC không bắt buộc solve theo timer cố định; Event Trigger phải chứng minh được lợi ích bằng số liệu.
+1. PID không bị loại bỏ; PID giữ vòng phản xạ nhanh khi phù hợp.
+2. MPC chỉ dùng nơi prediction, coupling hoặc constraints tạo giá trị thực.
+3. Event Trigger phải chứng minh lợi ích bằng số liệu.
 4. Watchdog luôn tồn tại để tránh dùng prediction quá cũ.
-5. Mọi controller phải được đánh giá theo **control quality + compute cost + solver quality**.
-6. Simulation core, plant model, solver, trigger policy và UI phải tách lớp.
-7. Không chuyển sang AI/Learning MPC trước khi baseline classical control được kiểm chứng.
-8. Không gọi một thuật toán là “real-time” nếu chưa có timing benchmark trên target hardware.
+5. Mọi controller được đánh giá theo **control quality + compute cost + solver quality + feasibility**.
+6. Không phát guidance mới từ nghiệm timeout/infeasible/numerically invalid.
+7. Core, plant model, constraints, solver, trigger policy và UI phải tách lớp.
+8. Không chuyển sang AI/Learning MPC trước khi baseline classical control được kiểm chứng.
+9. Không gọi thuật toán là “real-time” nếu chưa benchmark trên target hardware.
 
 ## Chạy local
 
