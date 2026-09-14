@@ -30,6 +30,14 @@ export const defaultConfig = {
     uMax: 4,
     deltaUMin: -0.65,
     deltaUMax: 0.65,
+    stateConstraintsEnabled: false,
+    positionMin: -1.5,
+    positionMax: 1.5,
+    velocityMin: -1.2,
+    velocityMax: 1.2,
+    outputConstraintsEnabled: false,
+    outputMin: -0.2,
+    outputMax: 1.05,
     referenceLead: 0.5,
     velocityDamping: 0.08,
     maxReferenceLead: 0.4,
@@ -67,7 +75,23 @@ function settlingTime(samples, target, tolerance = 0.02) {
   return null;
 }
 
-function metrics(samples, target, solverRecords) {
+function safetyViolationAt(sample, cfg) {
+  let violation = 0;
+  if (cfg.mpc.stateConstraintsEnabled) {
+    if (Number.isFinite(cfg.mpc.positionMin)) violation = Math.max(violation, cfg.mpc.positionMin - sample.x);
+    if (Number.isFinite(cfg.mpc.positionMax)) violation = Math.max(violation, sample.x - cfg.mpc.positionMax);
+    if (Number.isFinite(cfg.mpc.velocityMin)) violation = Math.max(violation, cfg.mpc.velocityMin - sample.v);
+    if (Number.isFinite(cfg.mpc.velocityMax)) violation = Math.max(violation, sample.v - cfg.mpc.velocityMax);
+  }
+  if (cfg.mpc.outputConstraintsEnabled) {
+    const y = sample.x;
+    if (Number.isFinite(cfg.mpc.outputMin)) violation = Math.max(violation, cfg.mpc.outputMin - y);
+    if (Number.isFinite(cfg.mpc.outputMax)) violation = Math.max(violation, y - cfg.mpc.outputMax);
+  }
+  return Math.max(0, violation);
+}
+
+function metrics(samples, target, solverRecords, cfg) {
   const dt = samples[1]?.t ?? 0.02;
   const peak = Math.max(...samples.map((p) => p.x));
   const solveCount = solverRecords.length;
@@ -85,6 +109,12 @@ function metrics(samples, target, solverRecords) {
   const statuses = solverRecords.map((record) => record.status).filter(Boolean);
   const fallbackCount = solverRecords.filter((record) => record.fallbackUsed).length;
   const approximateCount = diagnostics.filter((item) => item.acceptedApproximate).length;
+  const safetyViolations = samples.map((sample) => safetyViolationAt(sample, cfg));
+  const safetyViolationCount = safetyViolations.filter((value) => value > 1e-9).length;
+  const stateActiveSolves = diagnostics.filter((item) => {
+    const active = item.activeByKind || {};
+    return Object.keys(active).some((key) => (key.startsWith('state-') || key.startsWith('output-')) && active[key] > 0);
+  }).length;
 
   return {
     overshoot: Math.max(0, ((peak - target) / Math.max(Math.abs(target), 1e-9)) * 100),
@@ -111,6 +141,10 @@ function metrics(samples, target, solverRecords) {
     timeoutCount: statuses.filter((status) => status === 'timeout').length,
     infeasibleCount: statuses.filter((status) => status === 'infeasible').length,
     numericalFailureCount: statuses.filter((status) => status === 'numerical-failure').length,
+    maxActualSafetyViolation: safetyViolations.length ? Math.max(...safetyViolations) : 0,
+    safetyViolationCount,
+    safetyViolationRate: samples.length ? 100 * safetyViolationCount / samples.length : 0,
+    stateConstraintActiveSolveRate: solveCount ? 100 * stateActiveSolves / solveCount : 0,
   };
 }
 
@@ -224,6 +258,7 @@ export function runSimulation(mode, userConfig = {}) {
       stationarityResidual: solverDiagnostics?.projectedGradientResidual ?? solverDiagnostics?.kktResidual ?? null,
       feasibilityViolation: solverDiagnostics?.feasibilityViolation ?? null,
       activeConstraintRatio: solverDiagnostics?.activeConstraintRatio ?? null,
+      safetyViolation: safetyViolationAt(state, cfg),
     });
 
     expectedState = stepSecondOrderPlant(state, u, 0, cfg);
@@ -233,7 +268,7 @@ export function runSimulation(mode, userConfig = {}) {
 
   return {
     samples,
-    metrics: metrics(samples, cfg.setpoint, solverRecords),
+    metrics: metrics(samples, cfg.setpoint, solverRecords, cfg),
     config: cfg,
     model: createSecondOrderModel(cfg),
     solverRecords,
