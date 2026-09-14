@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { Activity, BrainCircuit, Cpu, Gauge, Play, Radar, SlidersHorizontal, TimerReset } from 'lucide-react';
-import { compareControllers, defaultConfig } from './core/simulator.js';
+import { Activity, BrainCircuit, Cpu, Gauge, Play, Radar, SlidersHorizontal, TimerReset, Waves } from 'lucide-react';
+import { compareControllers, defaultConfig, getStateSpaceModel } from './core/simulator.js';
 
 const MODES = ['PID', 'MPC', 'HYBRID'];
 
@@ -13,7 +13,16 @@ function NumberField({ label, value, step = 0.01, onChange }) {
   );
 }
 
-function Chart({ data, target }) {
+function ToggleField({ label, checked, onChange }) {
+  return (
+    <label className="toggle-field">
+      <span>{label}</span>
+      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+    </label>
+  );
+}
+
+function ResponseChart({ data, target }) {
   const width = 960;
   const height = 320;
   const pad = 34;
@@ -22,7 +31,7 @@ function Chart({ data, target }) {
   const yMax = Math.max(target * 1.25, ...all, 1.2);
   const tMax = Math.max(...data.flatMap((d) => d.samples.map((p) => p.t)));
   const x = (t) => pad + (t / tMax) * (width - 2 * pad);
-  const y = (v) => height - pad - ((v - yMin) / (yMax - yMin)) * (height - 2 * pad);
+  const y = (v) => height - pad - ((v - yMin) / Math.max(yMax - yMin, 1e-9)) * (height - 2 * pad);
   const path = (samples) => samples.map((p, i) => `${i ? 'L' : 'M'} ${x(p.t).toFixed(1)} ${y(p.x).toFixed(1)}`).join(' ');
 
   return (
@@ -35,8 +44,37 @@ function Chart({ data, target }) {
   );
 }
 
-function Metric({ label, value, suffix = '' }) {
-  return <div className="metric"><span>{label}</span><strong>{value}{suffix}</strong></div>;
+function TriggerTimeline({ samples, duration }) {
+  const width = 960;
+  const height = 96;
+  const pad = 34;
+  const x = (t) => pad + (t / duration) * (width - pad * 2);
+  const events = samples.filter((p) => p.triggered);
+  const disturbed = samples.filter((p) => Math.abs(p.disturbance) > 1e-9);
+  const d0 = disturbed[0]?.t;
+  const d1 = disturbed[disturbed.length - 1]?.t;
+  const reasonY = { initial: 31, 'prediction-error': 31, 'state-change': 48, constraint: 65, watchdog: 78, periodic: 48 };
+
+  return (
+    <svg className="timeline" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="MPC trigger timeline">
+      {d0 != null && <rect x={x(d0)} y="12" width={Math.max(2, x(d1) - x(d0))} height="68" className="disturbance-band" />}
+      <line x1={pad} y1="48" x2={width - pad} y2="48" className="axis" />
+      {events.map((p, index) => (
+        <g key={`${p.t}-${index}`}>
+          <line x1={x(p.t)} y1="22" x2={x(p.t)} y2="76" className={`trigger-line trigger-${p.triggerReason}`} />
+          <circle cx={x(p.t)} cy={reasonY[p.triggerReason] ?? 48} r="3.2" className={`trigger-dot trigger-${p.triggerReason}`} />
+        </g>
+      ))}
+    </svg>
+  );
+}
+
+function fmtMatrix(model) {
+  return {
+    A: model.A.map((row) => `[ ${row.map((v) => v.toFixed(4)).join('   ')} ]`).join('\n'),
+    B: `[ ${model.B.map((v) => v.toFixed(4)).join('   ')} ]ᵀ`,
+    C: `[ ${model.C.map((v) => v.toFixed(1)).join('   ')} ]`,
+  };
 }
 
 export default function App() {
@@ -44,6 +82,8 @@ export default function App() {
   const [activeMode, setActiveMode] = useState('HYBRID');
   const results = useMemo(() => compareControllers(cfg), [cfg]);
   const active = results.find((r) => r.mode === activeMode);
+  const hybrid = results.find((r) => r.mode === 'HYBRID');
+  const model = useMemo(() => fmtMatrix(getStateSpaceModel(cfg)), [cfg]);
   const update = (group, key, value) => setCfg((c) => group ? ({ ...c, [group]: { ...c[group], [key]: value } }) : ({ ...c, [key]: value }));
 
   return (
@@ -52,56 +92,74 @@ export default function App() {
         <div className="brand"><div className="brand-mark"><BrainCircuit size={24} /></div><div><b>MPC · PID</b><span>Control Research Lab</span></div></div>
         <nav>
           <a className="nav-active"><Gauge size={18}/>Workbench</a>
-          <a><Activity size={18}/>Plant Models</a>
+          <a><Activity size={18}/>State-Space Plant</a>
           <a><Radar size={18}/>Event Trigger</a>
           <a><Cpu size={18}/>Compute Profiler</a>
           <a><TimerReset size={18}/>Experiments</a>
         </nav>
-        <div className="sidebar-note"><b>V0.1 Research Core</b><span>PID · MPC · Event-triggered Hybrid</span></div>
+        <div className="sidebar-note"><b>V0.2 Predictive Core</b><span>State-space · sequence MPC · disturbance · event-trigger profiler</span></div>
       </aside>
 
       <main>
         <header>
-          <div><p className="eyebrow">ADVANCED CONTROL WORKBENCH</p><h1>Predict first. Correct fast.</h1><p className="subtitle">MPC dự đoán và tối ưu; PID giữ vòng phản xạ nhanh. Trigger quyết định khi nào đáng để tái tính MPC.</p></div>
-          <button className="run"><Play size={17} fill="currentColor"/>Simulation live</button>
+          <div><p className="eyebrow">ADVANCED CONTROL WORKBENCH</p><h1>Predict only when prediction is worth the cost.</h1><p className="subtitle">Plant chạy ở state-space. MPC tối ưu một chuỗi điều khiển; PID giữ vòng phản xạ nhanh; Event Trigger quyết định thời điểm cần tái tối ưu.</p></div>
+          <button className="run"><Play size={17} fill="currentColor"/>Deterministic simulation</button>
         </header>
 
         <section className="kpi-grid">
-          <div className="kpi"><span>Active architecture</span><strong>MPC → Trigger → PID</strong><small>Hybrid supervisory control</small></div>
-          <div className="kpi"><span>MPC solves</span><strong>{active.metrics.solveCount}</strong><small>over {cfg.duration.toFixed(1)} seconds</small></div>
-          <div className="kpi"><span>Settling time</span><strong>{active.metrics.settling == null ? '—' : `${active.metrics.settling.toFixed(2)} s`}</strong><small>±2% band</small></div>
-          <div className="kpi"><span>Integrated error</span><strong>{active.metrics.iae.toFixed(3)}</strong><small>IAE</small></div>
+          <div className="kpi"><span>Architecture</span><strong>MPC → Event → PID</strong><small>supervisory predictive control</small></div>
+          <div className="kpi"><span>Hybrid MPC solves</span><strong>{hybrid.metrics.solveCount}</strong><small>{hybrid.metrics.triggerRate.toFixed(1)} solves/s average</small></div>
+          <div className="kpi"><span>Compute avoided</span><strong>{hybrid.metrics.computeReduction.toFixed(1)}%</strong><small>vs solving MPC every sample</small></div>
+          <div className="kpi"><span>Average solve</span><strong>{hybrid.metrics.avgSolveMs.toFixed(3)} ms</strong><small>browser-side optimizer</small></div>
         </section>
 
         <section className="workspace">
           <div className="panel chart-panel">
-            <div className="panel-head"><div><span className="section-tag">RESPONSE</span><h2>Closed-loop comparison</h2></div><div className="legend"><i className="l-pid"/>PID <i className="l-mpc"/>MPC <i className="l-hybrid"/>Hybrid</div></div>
-            <Chart data={results} target={cfg.setpoint} />
+            <div className="panel-head"><div><span className="section-tag">RESPONSE</span><h2>Closed-loop comparison under disturbance</h2></div><div className="legend"><i className="l-pid"/>PID <i className="l-mpc"/>MPC <i className="l-hybrid"/>Hybrid</div></div>
+            <ResponseChart data={results} target={cfg.setpoint} />
             <div className="mode-tabs">{MODES.map((m) => <button key={m} className={activeMode === m ? 'selected' : ''} onClick={() => setActiveMode(m)}>{m === 'HYBRID' ? 'MPC + PID' : m}</button>)}</div>
+
+            <div className="timeline-wrap">
+              <div className="timeline-title"><div><span className="section-tag">EVENTS</span><h3>Trigger timeline — {activeMode === 'HYBRID' ? 'event-driven solves' : activeMode === 'MPC' ? 'periodic solves' : 'no MPC solver'}</h3></div><span className="disturbance-key"><Waves size={14}/> disturbance window</span></div>
+              <TriggerTimeline samples={active.samples} duration={cfg.duration} />
+              <div className="trigger-legend"><span>prediction error</span><span>state change</span><span>constraint</span><span>watchdog</span></div>
+            </div>
           </div>
 
           <div className="panel controls-panel">
             <div className="panel-head"><div><span className="section-tag">TUNING</span><h2>Experiment parameters</h2></div><SlidersHorizontal size={19}/></div>
             <div className="control-group"><h3>System</h3><NumberField label="Setpoint" value={cfg.setpoint} onChange={(v) => update(null, 'setpoint', v)}/><NumberField label="Sample time (s)" value={cfg.dt} step={0.005} onChange={(v) => update(null, 'dt', Math.max(0.005, v))}/></div>
-            <div className="control-group"><h3>PID</h3><NumberField label="Kp" value={cfg.pid.kp} onChange={(v) => update('pid', 'kp', v)}/><NumberField label="Ki" value={cfg.pid.ki} onChange={(v) => update('pid', 'ki', v)}/><NumberField label="Kd" value={cfg.pid.kd} onChange={(v) => update('pid', 'kd', v)}/></div>
-            <div className="control-group"><h3>MPC</h3><NumberField label="Horizon" value={cfg.mpc.horizon} step={1} onChange={(v) => update('mpc', 'horizon', Math.max(2, Math.round(v)))}/><NumberField label="Q state" value={cfg.mpc.q} onChange={(v) => update('mpc', 'q', v)}/><NumberField label="R input" value={cfg.mpc.r} onChange={(v) => update('mpc', 'r', v)}/></div>
-            <div className="control-group accent"><h3>Event trigger</h3><NumberField label="Prediction error" value={cfg.trigger.predictionError} step={0.01} onChange={(v) => update('trigger', 'predictionError', Math.max(0.001, v))}/><NumberField label="State error" value={cfg.trigger.stateError} step={0.01} onChange={(v) => update('trigger', 'stateError', Math.max(0.001, v))}/><NumberField label="Max interval (s)" value={cfg.trigger.maxInterval} step={0.02} onChange={(v) => update('trigger', 'maxInterval', Math.max(cfg.dt, v))}/></div>
+            <div className="control-group"><h3>PID fast loop</h3><NumberField label="Kp" value={cfg.pid.kp} onChange={(v) => update('pid', 'kp', v)}/><NumberField label="Ki" value={cfg.pid.ki} onChange={(v) => update('pid', 'ki', v)}/><NumberField label="Kd" value={cfg.pid.kd} onChange={(v) => update('pid', 'kd', v)}/></div>
+            <div className="control-group"><h3>Predictive MPC</h3><NumberField label="Horizon" value={cfg.mpc.horizon} step={1} onChange={(v) => update('mpc', 'horizon', Math.max(3, Math.round(v)))}/><NumberField label="Q position" value={cfg.mpc.qPosition} onChange={(v) => update('mpc', 'qPosition', Math.max(0, v))}/><NumberField label="Q velocity" value={cfg.mpc.qVelocity} onChange={(v) => update('mpc', 'qVelocity', Math.max(0, v))}/><NumberField label="R input" value={cfg.mpc.rInput} onChange={(v) => update('mpc', 'rInput', Math.max(0, v))}/></div>
+            <div className="control-group accent"><h3>Event trigger</h3><NumberField label="Prediction error" value={cfg.trigger.predictionError} step={0.005} onChange={(v) => update('trigger', 'predictionError', Math.max(0.001, v))}/><NumberField label="State change" value={cfg.trigger.stateChange} step={0.01} onChange={(v) => update('trigger', 'stateChange', Math.max(0.001, v))}/><NumberField label="Min interval (s)" value={cfg.trigger.minInterval} step={0.02} onChange={(v) => update('trigger', 'minInterval', Math.max(cfg.dt, v))}/><NumberField label="Watchdog (s)" value={cfg.trigger.maxInterval} step={0.02} onChange={(v) => update('trigger', 'maxInterval', Math.max(cfg.trigger.minInterval, v))}/></div>
+            <div className="control-group disturbance-controls"><h3>Disturbance injection</h3><ToggleField label="Enabled" checked={cfg.disturbance.enabled} onChange={(v) => update('disturbance', 'enabled', v)}/><NumberField label="Start (s)" value={cfg.disturbance.start} step={0.1} onChange={(v) => update('disturbance', 'start', Math.max(0, v))}/><NumberField label="Duration (s)" value={cfg.disturbance.duration} step={0.1} onChange={(v) => update('disturbance', 'duration', Math.max(cfg.dt, v))}/><NumberField label="Amplitude" value={cfg.disturbance.amplitude} step={0.1} onChange={(v) => update('disturbance', 'amplitude', v)}/></div>
           </div>
         </section>
 
-        <section className="panel analysis-panel">
-          <div className="panel-head"><div><span className="section-tag">ANALYSIS</span><h2>Controller efficiency</h2></div></div>
-          <div className="comparison-table">
-            <div className="table-row table-head"><span>Controller</span><span>Overshoot</span><span>Settling</span><span>IAE</span><span>Control effort</span><span>MPC solves</span></div>
-            {results.map((r) => <div className={`table-row ${r.mode === activeMode ? 'row-active' : ''}`} key={r.mode} onClick={() => setActiveMode(r.mode)}><b>{r.mode === 'HYBRID' ? 'Event MPC + PID' : r.mode}</b><span>{r.metrics.overshoot.toFixed(2)}%</span><span>{r.metrics.settling == null ? '—' : `${r.metrics.settling.toFixed(2)} s`}</span><span>{r.metrics.iae.toFixed(3)}</span><span>{r.metrics.controlEffort.toFixed(3)}</span><span>{r.metrics.solveCount}</span></div>)}
+        <section className="lower-grid">
+          <div className="panel analysis-panel">
+            <div className="panel-head"><div><span className="section-tag">ANALYSIS</span><h2>Controller efficiency</h2></div></div>
+            <div className="comparison-table">
+              <div className="table-row table-head"><span>Controller</span><span>Overshoot</span><span>Settling</span><span>IAE</span><span>Effort</span><span>MPC solves</span><span>Solver total</span></div>
+              {results.map((r) => <div className={`table-row ${r.mode === activeMode ? 'row-active' : ''}`} key={r.mode} onClick={() => setActiveMode(r.mode)}><b>{r.mode === 'HYBRID' ? 'Event MPC + PID' : r.mode}</b><span>{r.metrics.overshoot.toFixed(2)}%</span><span>{r.metrics.settling == null ? '—' : `${r.metrics.settling.toFixed(2)} s`}</span><span>{r.metrics.iae.toFixed(3)}</span><span>{r.metrics.controlEffort.toFixed(3)}</span><span>{r.metrics.solveCount}</span><span>{r.metrics.totalSolveMs.toFixed(2)} ms</span></div>)}
+            </div>
+          </div>
+
+          <div className="panel model-panel">
+            <div className="panel-head"><div><span className="section-tag">MODEL</span><h2>Discrete state-space</h2></div></div>
+            <div className="equation">xₖ₊₁ = A xₖ + B uₖ + E dₖ</div>
+            <div className="matrix-block"><span>A</span><pre>{model.A}</pre></div>
+            <div className="matrix-block"><span>B</span><pre>{model.B}</pre></div>
+            <div className="matrix-block"><span>C</span><pre>{model.C}</pre></div>
+            <p className="model-note">State vector: x = [position, velocity]ᵀ. MPC dự đoán với mô hình danh định; disturbance chỉ đi vào plant thật để kiểm tra khả năng phát hiện sai lệch.</p>
           </div>
         </section>
 
         <section className="concept-grid">
-          <div className="concept"><span>01</span><h3>Predict</h3><p>MPC đánh giá horizon tương lai trên mô hình plant và chọn hành động có cost thấp.</p></div>
-          <div className="concept"><span>02</span><h3>Trigger</h3><p>Chỉ tái solve khi prediction error, state error hoặc watchdog yêu cầu.</p></div>
-          <div className="concept"><span>03</span><h3>Correct</h3><p>PID chạy ở vòng nhanh để bám reference do lớp dự đoán cung cấp.</p></div>
-          <div className="concept"><span>04</span><h3>Measure</h3><p>So sánh overshoot, settling time, IAE, control effort và số lần solve MPC.</p></div>
+          <div className="concept"><span>01</span><h3>Model</h3><p>Plant được rời rạc hóa thành state-space để sau này thay trực tiếp bằng UAV, UGV hoặc USV.</p></div>
+          <div className="concept"><span>02</span><h3>Optimize</h3><p>MPC tối ưu toàn bộ control sequence có giới hạn input, cost trạng thái và Δu.</p></div>
+          <div className="concept"><span>03</span><h3>Trigger</h3><p>Prediction error, state change, actuator constraint và watchdog quyết định thời điểm solve mới.</p></div>
+          <div className="concept"><span>04</span><h3>Profile</h3><p>Đánh giá đồng thời chất lượng điều khiển và chi phí tính toán, thay vì chỉ nhìn đường đáp ứng đẹp.</p></div>
         </section>
       </main>
     </div>
