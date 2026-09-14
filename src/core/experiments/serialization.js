@@ -10,6 +10,7 @@ function mergeConfig(config = {}) {
     plant: { ...defaultConfig.plant, ...(config.plant || {}) },
     pid: { ...defaultConfig.pid, ...(config.pid || {}) },
     mpc: { ...defaultConfig.mpc, ...(config.mpc || {}) },
+    safety: { ...defaultConfig.safety, ...(config.safety || {}) },
     trigger: { ...defaultConfig.trigger, ...(config.trigger || {}) },
     disturbance: { ...defaultConfig.disturbance, ...(config.disturbance || {}) },
   };
