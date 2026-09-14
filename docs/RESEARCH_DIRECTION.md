@@ -67,18 +67,12 @@ J_total = w1 * tracking_error
 - Solver interface tách khỏi controller/simulator.
 - Có `box-qp` backend và projected-gradient baseline.
 - Hard input bounds được giữ khả thi bằng projection.
-- Ghi lại:
-  - convergence,
-  - iterations,
-  - solve time,
-  - KKT residual,
-  - feasibility violation,
-  - active constraints.
+- Ghi lại convergence, iterations, solve time, optimality residual, feasibility violation và active constraints.
 - Dashboard hiển thị solver health thay vì chỉ hiển thị thời gian solve.
 
-### Gate 3B — General constrained MPC — NEXT
+### Gate 3B — General constrained MPC — PARTIAL PASS
 
-Đây là gate kế tiếp, chưa được coi là PASS cho đến khi có đủ:
+Đã hoàn thành:
 
 - hard slew-rate constraints:
 
@@ -86,14 +80,34 @@ J_total = w1 * tracking_error
 Δu_min ≤ u_k - u_{k-1} ≤ Δu_max
 ```
 
-- state/output inequalities,
-- explicit feasible/infeasible status,
-- fallback behavior khi solver không hội tụ hoặc bài toán infeasible,
-- benchmark nội bộ giữa box-QP và một external QP backend (ưu tiên OSQP/WASM hoặc backend tương đương),
-- reproducible experiment presets,
-- regression scenarios cho constraint activation.
+- generalized inequality representation:
 
-Không bắt đầu Kalman Filter trước khi ít nhất hard `Δu` constraints và solver-failure semantics được hoàn thiện.
+```text
+A U ≤ b
+```
+
+- hard input bounds và hard `Δu` dùng chung constraint layer,
+- sparse Dykstra projection lên giao các half-space,
+- projected-gradient stationarity residual cho polyhedral feasible set,
+- explicit solver status:
+  - `solved`,
+  - `max-iterations` nhưng feasible/approximate,
+  - `timeout`,
+  - `infeasible`,
+  - `numerical-failure`,
+- fallback policy: timeout/infeasible/numerical failure không được tạo guidance mới cho hybrid PID,
+- regression test độc lập cho `AU≤b` và hard `Δu`.
+
+Gate 3B **chưa đóng** cho đến khi có đủ:
+
+- state/output inequalities,
+- reproducible experiment presets,
+- constraint activation scenarios mở rộng,
+- backend benchmark suite,
+- external QP backend benchmark (ưu tiên OSQP/WASM hoặc backend tương đương khi thực sự cần general constraints lớn hơn),
+- deadline/failure regression scenarios.
+
+Không bắt đầu Kalman Filter trước khi state/output constraints và reproducible experiments đủ để khóa Gate 3B.
 
 ### Gate 4 — Estimation
 
@@ -156,19 +170,20 @@ PASS khi:
 8. Mọi experiment quan trọng phải tái lập được bằng preset/config.
 9. Một solver chỉ được coi là tốt khi **objective + feasibility + optimality + timing** cùng đạt yêu cầu.
 10. Khi solver fail, hệ thống phải có semantics rõ ràng; không được âm thầm dùng một nghiệm không đạt chuẩn.
+11. Constraint penalty trong objective không được nhầm với hard constraint; hai khái niệm phải được thể hiện riêng trong code và UI.
 
 ## Milestone kế tiếp
 
-**V0.3B — General constrained MPC**
+**V0.3C — State/output constraints + reproducible experiments**
 
 Thứ tự thực hiện:
 
-1. hard `Δu` constraints,
-2. generalized inequality representation,
-3. feasible/infeasible solver status,
-4. fallback policy,
-5. constraint activation scenarios,
-6. experiment presets,
-7. external QP benchmark.
+1. state/output inequality builder từ `Φ`, `Γ`,
+2. hard position/velocity constraints,
+3. constraint activation scenarios,
+4. experiment preset schema + save/load/export,
+5. solver benchmark suite,
+6. timeout/infeasible regression scenarios,
+7. đánh giá có cần external QP/WASM backend ở quy mô hiện tại hay chưa.
 
-Sau V0.3B mới mở Gate 4 — State Estimation.
+Chỉ sau khi V0.3C PASS mới mở Gate 4 — State Estimation.
