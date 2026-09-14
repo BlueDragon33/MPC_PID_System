@@ -84,6 +84,7 @@ export const defaultConfig = {
     disturbanceProcessVariance: 8e-3,
     initialDisturbanceVariance: 0.8,
     disturbanceRetention: 1,
+    disturbancePredictionEnabled: false,
   },
   trigger: {
     predictionError: 0.035,
@@ -198,6 +199,7 @@ function metrics(samples, target, solverRecords, cfg) {
   const disturbanceVariances = disturbanceEstimateSamples
     .map((sample) => sample.disturbanceVariance)
     .filter(Number.isFinite);
+  const predictionCompensatedSamples = samples.filter((sample) => sample.disturbancePredictionEnabled);
 
   const tighteningSamples = samples.filter((sample) => sample.uncertaintyTighteningEnabled);
   const positionMargins = tighteningSamples.map((sample) => sample.uncertaintyPositionMargin).filter(Number.isFinite);
@@ -262,6 +264,7 @@ function metrics(samples, target, solverRecords, cfg) {
     activeDisturbanceEstimateRmse: rms(activeDisturbanceEstimateErrors),
     avgDisturbanceVariance: average(disturbanceVariances),
     finalDisturbanceVariance: disturbanceVariances.length ? disturbanceVariances[disturbanceVariances.length - 1] : null,
+    disturbancePredictionEnabled: predictionCompensatedSamples.length > 0,
     truthPlantMismatchEnabled: samples.some((sample) => sample.truthPlantMismatchEnabled),
     uncertaintyTighteningEnabled: tighteningSamples.length > 0,
     avgUncertaintyPositionMargin: average(positionMargins),
@@ -298,6 +301,7 @@ export function runSimulation(mode, userConfig = {}) {
   const truthModel = createSecondOrderModel(truthCfg);
   const estimationEnabled = Boolean(cfg.estimation.enabled);
   const disturbanceStateEnabled = Boolean(estimationEnabled && cfg.estimation.disturbanceStateEnabled);
+  const disturbancePredictionEnabled = Boolean(disturbanceStateEnabled && cfg.estimation.disturbancePredictionEnabled);
   const sensor = createMeasurementSensor({
     C: model.C,
     noiseStd: estimationEnabled ? cfg.estimation.measurementNoiseStd : 0,
@@ -404,6 +408,7 @@ export function runSimulation(mode, userConfig = {}) {
       estimatorCovariance,
       model.C,
     );
+    const predictionDisturbance = disturbancePredictionEnabled ? disturbanceEstimate : 0;
     const event = evaluateEventTrigger({
       k,
       t,
@@ -534,6 +539,8 @@ export function runSimulation(mode, userConfig = {}) {
       estimateD: disturbanceStateEnabled ? disturbanceEstimate : null,
       disturbanceVariance: disturbanceStateEnabled ? disturbanceVariance : null,
       disturbanceRetention: disturbanceStateEnabled ? cfg.estimation.disturbanceRetention : null,
+      disturbancePredictionEnabled,
+      predictionDisturbance,
       innovation: estimationEnabled ? estimatorDiagnostics?.innovation ?? null : null,
       innovationVariance: estimationEnabled ? estimatorDiagnostics?.innovationVariance ?? null : null,
       covarianceTrace: estimationEnabled ? covarianceTrace : null,
@@ -580,7 +587,7 @@ export function runSimulation(mode, userConfig = {}) {
         : null,
     });
 
-    expectedState = stepSecondOrderPlant(controllerState, u, 0, controlCfg);
+    expectedState = stepSecondOrderPlant(controllerState, u, predictionDisturbance, controlCfg);
     previousU = u;
     state = stepSecondOrderPlant(state, u, disturbance, truthCfg);
 
