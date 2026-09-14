@@ -101,3 +101,66 @@ if (constrainedSafetyMpc && constrainedSafetyHybrid && constrainedSafetyGoverned
   console.log(`Safety-envelope intervention rate:         ${constrainedSafetyGoverned.governorInterventionRate.toFixed(1)}%`);
   console.log(`Actuator/plan conditioning rate:           ${constrainedSafetyGoverned.governorConditioningRate.toFixed(1)}%`);
 }
+
+const noisyPreset = applyExperimentPreset(defaultConfig, 'noisy-estimation');
+const sharedEstimationBenchmark = {
+  ...noisyPreset,
+  duration: 2.2,
+  disturbance: {
+    ...noisyPreset.disturbance,
+    enabled: true,
+    start: 0.7,
+    duration: 0.55,
+    amplitude: 1.3,
+  },
+  mpc: {
+    ...noisyPreset.mpc,
+    solver: SOLVER_BACKENDS.CONSTRAINED_QP,
+    horizon: 12,
+    qpIterations: Math.max(100, noisyPreset.mpc.qpIterations),
+    qpProjectionCycles: Math.max(16, noisyPreset.mpc.qpProjectionCycles),
+    qpTolerance: Math.min(5e-5, noisyPreset.mpc.qpTolerance),
+  },
+};
+
+const truthStateResult = runSimulation('HYBRID_SAFE', {
+  ...sharedEstimationBenchmark,
+  estimation: { ...sharedEstimationBenchmark.estimation, enabled: false },
+});
+const estimatedStateResult = runSimulation('HYBRID_SAFE', {
+  ...sharedEstimationBenchmark,
+  estimation: { ...sharedEstimationBenchmark.estimation, enabled: true },
+});
+
+console.log('\nState-estimation closed-loop benchmark');
+console.table([
+  {
+    controllerState: 'truth',
+    IAE: truthStateResult.metrics.iae.toFixed(4),
+    solves: truthStateResult.metrics.solveCount,
+    'conv %': truthStateResult.metrics.convergenceRate == null ? 'n/a' : truthStateResult.metrics.convergenceRate.toFixed(1),
+    fallback: truthStateResult.metrics.fallbackCount,
+    'plant safety': truthStateResult.metrics.maxActualSafetyViolation.toExponential(2),
+    'unsafe %': truthStateResult.metrics.safetyViolationRate.toFixed(1),
+    'safety %': truthStateResult.metrics.governorInterventionRate.toFixed(1),
+    'measurement RMSE': '—',
+    'x-hat RMSE': '—',
+    'v-hat RMSE': '—',
+  },
+  {
+    controllerState: 'kalman',
+    IAE: estimatedStateResult.metrics.iae.toFixed(4),
+    solves: estimatedStateResult.metrics.solveCount,
+    'conv %': estimatedStateResult.metrics.convergenceRate == null ? 'n/a' : estimatedStateResult.metrics.convergenceRate.toFixed(1),
+    fallback: estimatedStateResult.metrics.fallbackCount,
+    'plant safety': estimatedStateResult.metrics.maxActualSafetyViolation.toExponential(2),
+    'unsafe %': estimatedStateResult.metrics.safetyViolationRate.toFixed(1),
+    'safety %': estimatedStateResult.metrics.governorInterventionRate.toFixed(1),
+    'measurement RMSE': estimatedStateResult.metrics.measurementRmse?.toFixed(4) ?? 'n/a',
+    'x-hat RMSE': estimatedStateResult.metrics.estimatePositionRmse?.toFixed(4) ?? 'n/a',
+    'v-hat RMSE': estimatedStateResult.metrics.estimateVelocityRmse?.toFixed(4) ?? 'n/a',
+  },
+]);
+
+console.log(`Estimated/truth IAE ratio: ${(estimatedStateResult.metrics.iae / truthStateResult.metrics.iae).toFixed(3)}`);
+console.log(`Estimate/measurement position RMSE ratio: ${estimatedStateResult.metrics.estimateToMeasurementRmseRatio?.toFixed(3) ?? 'n/a'}`);
