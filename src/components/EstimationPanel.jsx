@@ -45,8 +45,13 @@ export default function EstimationPanel({ cfg, setCfg }) {
         <NumberField label="Noise seed" value={estimation.seed} step={1} min={1} onChange={(value) => update('seed', Math.max(1, Math.round(value)))} />
         <NumberField label="Q position" value={estimation.processPositionVariance} step={0.00001} min={0} onChange={(value) => update('processPositionVariance', Math.max(0, value))} />
         <NumberField label="Q velocity" value={estimation.processVelocityVariance} step={0.0001} min={0} onChange={(value) => update('processVelocityVariance', Math.max(0, value))} />
-        <NumberField label="Initial P position" value={estimation.initialPositionVariance} step={0.05} min={0} onChange={(value) => update('initialPositionVariance', Math.max(0, value))} />
-        <NumberField label="Initial P velocity" value={estimation.initialVelocityVariance} step={0.05} min={0} onChange={(value) => update('initialVelocityVariance', Math.max(0, value))} />
+        <NumberField label="Initial P position" value={estimation.initialPositionVariance} step={0.01} min={0} onChange={(value) => update('initialPositionVariance', Math.max(0, value))} />
+        <NumberField label="Initial P velocity" value={estimation.initialVelocityVariance} step={0.01} min={0} onChange={(value) => update('initialVelocityVariance', Math.max(0, value))} />
+        <div className="estimation-subsection">
+          <ToggleField label="Covariance safety tightening" checked={estimation.constraintTighteningEnabled} onChange={(value) => update('constraintTighteningEnabled', value)} />
+          {estimation.constraintTighteningEnabled && <NumberField label="Constraint kσ" value={estimation.constraintSigma} step={0.25} min={0} onChange={(value) => update('constraintSigma', Math.max(0, value))} />}
+          <p className="estimation-note">MPC/Governor co predicted envelope theo kσ·√P. Actual plant safety vẫn được chấm theo envelope gốc.</p>
+        </div>
       </>}
     </div>
   );
