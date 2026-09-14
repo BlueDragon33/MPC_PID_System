@@ -1,4 +1,8 @@
-import { buildInputRateInequalities } from './constraints.js';
+import {
+  appendPredictionInequalities,
+  buildInputRateInequalities,
+  finalizeInequalities,
+} from './constraints.js';
 
 const zeros = (rows, cols) => Array.from({ length: rows }, () => new Array(cols).fill(0));
 const identity = (n) => Array.from({ length: n }, (_, i) => Array.from({ length: n }, (_, j) => (i === j ? 1 : 0)));
@@ -105,7 +109,7 @@ export function buildPredictionMatrices(A, B, horizon) {
   return { Phi, Gamma };
 }
 
-export function buildCondensedQP({ A, B, state, target, previousU, cfg }) {
+export function buildCondensedQP({ A, B, C = [1, 0], state, target, previousU, cfg }) {
   const N = cfg.mpc.horizon;
   const { Phi, Gamma } = buildPredictionMatrices(A, B, N);
   const Qbar = blockDiagonalStateCost(N, cfg);
@@ -140,6 +144,21 @@ export function buildCondensedQP({ A, B, state, target, previousU, cfg }) {
     deltaUMax: cfg.mpc.deltaUMax,
     previousU,
   });
+
+  appendPredictionInequalities(inequalities, {
+    Gamma,
+    freePrediction,
+    horizon: N,
+    stateDimension: 2,
+    outputC: C,
+    positionMin: cfg.mpc.positionMin,
+    positionMax: cfg.mpc.positionMax,
+    velocityMin: cfg.mpc.velocityMin,
+    velocityMax: cfg.mpc.velocityMax,
+    outputMin: cfg.mpc.outputMin,
+    outputMax: cfg.mpc.outputMax,
+  });
+  finalizeInequalities(inequalities);
 
   return {
     H,
@@ -183,6 +202,10 @@ export function qpDiagnostics(qp) {
     dimension: n,
     inequalities: qp.inequalities.rows.length,
     rateConstraintsEnabled: qp.inequalities.rateEnabled,
+    stateConstraintsEnabled: qp.inequalities.stateConstraintsEnabled,
+    outputConstraintsEnabled: qp.inequalities.outputConstraintsEnabled,
+    stateConstraintCount: qp.inequalities.stateConstraintCount || 0,
+    outputConstraintCount: qp.inequalities.outputConstraintCount || 0,
     maxSymmetryError,
     minDiagonal,
     finite: finite && constraintFinite,
