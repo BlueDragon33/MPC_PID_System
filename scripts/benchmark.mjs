@@ -49,7 +49,9 @@ for (const item of cases) {
     actualSafetyViolation: result.metrics.maxActualSafetyViolation,
     safetyViolationRate: result.metrics.safetyViolationRate,
     governorInterventionRate: result.metrics.governorInterventionRate,
+    governorConditioningRate: result.metrics.governorConditioningRate,
     governorMaxCorrection: result.metrics.governorMaxCorrection,
+    governorMaxConditioningCorrection: result.metrics.governorMaxConditioningCorrection,
     governorEmergencyCount: result.metrics.governorEmergencyCount,
   });
 }
@@ -68,8 +70,10 @@ console.table(rows.map((row) => ({
   'QP viol': row.maxQPViolation == null ? 'n/a' : row.maxQPViolation.toExponential(2),
   'plant safety': row.actualSafetyViolation.toExponential(2),
   'unsafe %': row.safetyViolationRate.toFixed(1),
-  'gov %': row.governorInterventionRate.toFixed(1),
-  'gov max Δu': row.governorMaxCorrection.toFixed(3),
+  'safety %': row.governorInterventionRate.toFixed(1),
+  'condition %': row.governorConditioningRate.toFixed(1),
+  'safety max Δu': row.governorMaxCorrection.toFixed(3),
+  'condition max Δu': row.governorMaxConditioningCorrection.toFixed(3),
   emergency: row.governorEmergencyCount,
 })));
 
@@ -81,5 +85,6 @@ if (constrainedSafetyMpc && constrainedSafetyHybrid && constrainedSafetyGoverned
   console.log(`Periodic constrained MPC plant violation: ${constrainedSafetyMpc.actualSafetyViolation.toExponential(3)}`);
   console.log(`Hybrid guidance-only plant violation:      ${constrainedSafetyHybrid.actualSafetyViolation.toExponential(3)}`);
   console.log(`Hybrid + Safety Governor violation:        ${constrainedSafetyGoverned.actualSafetyViolation.toExponential(3)}`);
-  console.log(`Governor intervention rate:                ${constrainedSafetyGoverned.governorInterventionRate.toFixed(1)}%`);
+  console.log(`Safety-envelope intervention rate:         ${constrainedSafetyGoverned.governorInterventionRate.toFixed(1)}%`);
+  console.log(`Actuator/plan conditioning rate:           ${constrainedSafetyGoverned.governorConditioningRate.toFixed(1)}%`);
 }
