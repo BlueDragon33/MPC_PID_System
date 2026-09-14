@@ -28,71 +28,120 @@ Reference / Planner
       Sensor
 ```
 
-## V0.3B hiện tại — General Constrained MPC
+## V0.3C hiện tại — Predicted Safety Envelope + Reproducible Experiments
 
-- React + Vite research web-app.
-- Plant rời rạc dạng state-space với trạng thái `[position, velocity]ᵀ`.
-- PID fast loop có saturation và anti-windup cơ bản.
-- MPC tối ưu **control sequence** trên finite horizon.
-- Condensed prediction model:
+Lõi MPC đã chuyển từ box-only sang general constrained research core.
+
+### Prediction + optimization
 
 ```text
 X = Φ x₀ + Γ U
 ```
 
-- Quadratic objective:
-
 ```text
 min  0.5 Uᵀ H U + fᵀ U
+s.t. A U <= b
 ```
 
-- Constraint representation thống nhất:
+Constraint polyhedron hiện hỗ trợ:
+
+- hard input bounds,
+- hard slew-rate / `Δu`,
+- predicted position bounds,
+- predicted velocity bounds,
+- predicted output bounds.
+
+State/output inequalities được sinh trực tiếp từ `Φ`, `Γ` và free response, không nhét thủ công vào controller.
+
+### Solver stack
+
+Ba backend được giữ để nghiên cứu chéo:
+
+- `constrained-qp`: backend chính cho general `AU<=b`,
+- `box-qp`: QP baseline cho input box,
+- `projected-gradient`: sequence-optimization baseline.
+
+`constrained-qp` có:
+
+- warm start,
+- accelerated projected gradient,
+- sparse Dykstra projection,
+- adaptive projection refinement khi state/output constraints được bật,
+- explicit status: `solved`, `max-iterations`, `timeout`, `infeasible`, `numerical-failure`,
+- feasibility + stationarity diagnostics,
+- active-constraint statistics,
+- safe fallback semantics.
+
+Khi state/output envelope bất khả thi, fallback ưu tiên giữ **actuator magnitude + slew-rate constraints** hợp lệ và báo rõ envelope nào không thể thỏa. Nó không cố “cứu” state constraint bằng cách phát lệnh actuator phi vật lý.
+
+### Model safety vs real plant safety
+
+V0.3C tách hai khái niệm:
+
+1. **QP/model feasibility** — quỹ đạo MPC dự đoán có thỏa `AU<=b` hay không.
+2. **Actual plant safety** — plant thật sau PID + disturbance có thực sự còn trong envelope hay không.
+
+Điểm này đặc biệt quan trọng cho hybrid guidance-only: MPC tạo reference cho PID nhưng PID vẫn là execution loop riêng. Do đó predicted feasibility chưa tự động đồng nghĩa với hard safety guarantee của plant thật.
+
+Dashboard hiển thị riêng:
+
+- max QP feasibility violation,
+- max actual safety violation,
+- unsafe sample rate,
+- fraction of solves touching state/output boundary,
+- fallback / timeout / infeasible counts.
+
+### Reproducible experiment system
+
+Có các preset:
+
+- `baseline`,
+- `rate-limited`,
+- `safety-envelope`,
+- `disturbance-stress`,
+- `infeasible-guard`.
+
+Experiment dùng schema versioned:
 
 ```text
-A U <= b
+mpc-pid-experiment/v1
 ```
 
-bao gồm:
-- hard input bounds `uMin <= u(k) <= uMax`,
-- hard slew-rate bounds `ΔuMin <= u(k)-u(k-1) <= ΔuMax`.
+Web-app hỗ trợ:
 
-- Ba solver backend:
-  - `constrained-qp`: solver mặc định cho polyhedral input/rate constraints,
-  - `box-qp`: baseline QP cho hard input bounds,
-  - `projected-gradient`: legacy research baseline.
-- `constrained-qp` dùng warm-start, accelerated projected gradient và sparse Dykstra projection lên giao các half-space.
-- Explicit solver status:
-  - `solved`,
-  - `max-iterations` nhưng feasible/approximate,
-  - `timeout`,
-  - `infeasible`,
-  - `numerical-failure`.
-- Fallback semantics: timeout/infeasible/numerical failure không được âm thầm tạo guidance mới cho hybrid PID.
-- Diagnostics cho từng lần solve:
-  - convergence status,
-  - iteration count,
-  - projected-gradient/KKT-style stationarity residual,
-  - feasibility violation,
-  - active input/rate inequalities,
-  - projection cycles,
-  - solver time,
-  - fallback status.
-- Hybrid MPC → PID dùng **predictive reference shaping**.
-- Event trigger dựa trên model prediction error, normalized state change, actuator constraint proximity và watchdog timeout.
-- Disturbance injection chỉ tác động lên plant thật; MPC dùng model danh định.
-- Dashboard hiển thị response, trigger timeline, compute reduction, hard constraints và solver-health metrics.
-- Smoke test kiểm tra:
-  - state/control hữu hạn,
-  - event-trigger giảm số lần solve,
-  - condensed QP khớp rollout objective,
-  - Hessian đối xứng,
-  - hard input bounds,
-  - hard `Δu`,
-  - independent `AU<=b` feasibility check,
-  - explicit infeasibility/fallback semantics.
-- GitHub Actions CI chạy control-core smoke test + production build.
+- Save local,
+- Load local,
+- Export JSON,
+- Import JSON.
 
-> V0.3B đã vượt khỏi box-only MPC. Bước kế tiếp không phải Kalman ngay: cần hoàn thiện **state/output inequalities**, reproducible experiment presets và benchmark backend trước khi đóng toàn bộ Gate QP.
+Điều này cho phép một scenario được chạy lại đúng cấu hình thay vì phụ thuộc thao tác tay.
+
+### Regression + benchmark
+
+Smoke test kiểm tra:
+
+- state/control hữu hạn,
+- event-trigger giảm số lần solve,
+- condensed objective ↔ rollout objective,
+- Hessian symmetry,
+- hard input bounds,
+- hard `Δu`,
+- independent `AU<=b` feasibility,
+- predicted state/output envelope,
+- impossible-envelope infeasibility,
+- actuator-safe fallback.
+
+`npm run benchmark` so sánh solver, periodic MPC và hybrid theo:
+
+- IAE,
+- solve count,
+- average/max solve time,
+- convergence,
+- fallback,
+- QP feasibility violation,
+- actual plant safety violation.
+
+CI lưu cả `smoke.log` và `benchmark.log` làm research artifacts.
 
 ## Cấu trúc lõi
 
@@ -102,6 +151,9 @@ src/core/
 │   └── secondOrderPlant.js
 ├── controllers/
 │   └── pid.js
+├── experiments/
+│   ├── presets.js
+│   └── serialization.js
 ├── mpc/
 │   ├── condensedQP.js
 │   ├── constraints.js
@@ -116,7 +168,7 @@ src/core/
 └── simulator.js
 ```
 
-`simulator.js` chỉ đóng vai trò orchestration. Plant, controller, QP formulation, constraints, solver và trigger policy được tách độc lập để sau này thay backend, thêm Kalman Filter hoặc chuyển sang UAV/UGV/USV mà không viết lại toàn bộ hệ thống.
+`simulator.js` chỉ orchestration. Plant, controller, QP formulation, constraints, solver, experiment schema và trigger policy được tách độc lập.
 
 ## Research gates
 
@@ -129,26 +181,29 @@ src/core/
 - Compute profiling.
 
 ### Gate B1 — Condensed QP + box constraints — PASS
-- Prediction matrices `Φ`, `Γ`.
-- `H`, `f` và hard input bounds.
+- `Φ`, `Γ`, `H`, `f`.
+- Hard input bounds.
 - Solver adapter.
-- Box-QP backend.
-- Optimality/feasibility diagnostics.
-- Regression test condensed objective ↔ rollout objective.
+- QP optimality/feasibility diagnostics.
 
-### Gate B2 — General constrained MPC — PARTIAL PASS
+### Gate B2 — General input/rate constrained MPC — PASS
+- Generic `AU<=b`.
+- Hard `Δu`.
+- Explicit infeasibility/failure semantics.
+- Actuator-safe fallback.
+
+### Gate B3 — Predicted state/output safety + reproducible experiments — ACTIVE
 Đã có:
-- generic `AU <= b` representation,
-- hard `Δu` / slew-rate constraints,
-- sparse polyhedral projection,
-- explicit timeout/infeasible/numerical-failure status,
-- safe fallback semantics.
+- predicted position/velocity/output inequalities,
+- safety-envelope scenarios,
+- versioned experiment JSON,
+- save/load/import/export,
+- internal solver + safety benchmark,
+- real-plant safety audit.
 
-Còn thiếu trước khi đóng Gate B2:
-- state/output inequalities,
-- reproducible experiment presets,
-- backend benchmark suite,
-- deadline/failure scenario regression tests mở rộng.
+Còn quyết định research gate kế tiếp:
+- nếu hybrid guidance-only cho thấy plant-safety gap đáng kể, thêm **Safety Governor / admissibility filter** trước State Estimation,
+- external QP/WASM backend chỉ thêm khi benchmark chứng minh backend hiện tại là bottleneck hoặc constraint scale đòi hỏi.
 
 ### Gate C — State estimation
 - Observer / Kalman Filter.
@@ -176,25 +231,14 @@ Còn thiếu trước khi đóng Gate B2:
 - Export controller configuration.
 - Real plant validation.
 
-Chi tiết định hướng và tiêu chí PASS/FAIL nằm trong [`docs/RESEARCH_DIRECTION.md`](docs/RESEARCH_DIRECTION.md).
-
-## Nguyên tắc kiến trúc
-
-1. PID không bị loại bỏ; PID giữ vòng phản xạ nhanh khi phù hợp.
-2. MPC chỉ dùng nơi prediction, coupling hoặc constraints tạo giá trị thực.
-3. Event Trigger phải chứng minh lợi ích bằng số liệu.
-4. Watchdog luôn tồn tại để tránh dùng prediction quá cũ.
-5. Mọi controller được đánh giá theo **control quality + compute cost + solver quality + feasibility**.
-6. Không phát guidance mới từ nghiệm timeout/infeasible/numerically invalid.
-7. Core, plant model, constraints, solver, trigger policy và UI phải tách lớp.
-8. Không chuyển sang AI/Learning MPC trước khi baseline classical control được kiểm chứng.
-9. Không gọi thuật toán là “real-time” nếu chưa benchmark trên target hardware.
+Chi tiết gate nằm trong [`docs/RESEARCH_DIRECTION.md`](docs/RESEARCH_DIRECTION.md).
 
 ## Chạy local
 
 ```bash
 npm install
 npm run smoke
+npm run benchmark
 npm run dev
 ```
 
