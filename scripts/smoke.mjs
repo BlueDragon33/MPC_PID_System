@@ -1,4 +1,5 @@
-import { compareControllers, defaultConfig, getStateSpaceModel } from '../src/core/simulator.js';
+import { compareControllers, defaultConfig, getStateSpaceModel, runSimulation } from '../src/core/simulator.js';
+import { applyExperimentPreset } from '../src/core/experiments/presets.js';
 import { buildCondensedQP, evaluateCondensedQP, qpDiagnostics } from '../src/core/mpc/condensedQP.js';
 import { inequalityViolation } from '../src/core/mpc/constraints.js';
 import { evaluateMPCSequenceCost } from '../src/core/solvers/projectedGradientMPC.js';
@@ -19,6 +20,23 @@ function assertRateBounds(sequence, previousU, minDelta, maxDelta, tolerance = 1
     assert(delta >= minDelta - tolerance, `rate lower bound violated at ${i}: ${delta}`);
     assert(delta <= maxDelta + tolerance, `rate upper bound violated at ${i}: ${delta}`);
     prev = sequence[i];
+  }
+}
+
+function assertPredictedEnvelope(path, cfg, tolerance = 2e-5) {
+  for (let i = 0; i < path.length; i += 1) {
+    const p = path[i];
+    if (cfg.mpc.stateConstraintsEnabled) {
+      assert(p.x >= cfg.mpc.positionMin - tolerance, `predicted position lower bound violated at ${i}: ${p.x}`);
+      assert(p.x <= cfg.mpc.positionMax + tolerance, `predicted position upper bound violated at ${i}: ${p.x}`);
+      assert(p.v >= cfg.mpc.velocityMin - tolerance, `predicted velocity lower bound violated at ${i}: ${p.v}`);
+      assert(p.v <= cfg.mpc.velocityMax + tolerance, `predicted velocity upper bound violated at ${i}: ${p.v}`);
+    }
+    if (cfg.mpc.outputConstraintsEnabled) {
+      const y = p.x;
+      assert(y >= cfg.mpc.outputMin - tolerance, `predicted output lower bound violated at ${i}: ${y}`);
+      assert(y <= cfg.mpc.outputMax + tolerance, `predicted output upper bound violated at ${i}: ${y}`);
+    }
   }
 }
 
@@ -47,6 +65,7 @@ const qpPreviousU = 0.3;
 const qp = buildCondensedQP({
   A: model.A,
   B: model.B,
+  C: model.C,
   state: qpState,
   target: defaultConfig.setpoint,
   previousU: qpPreviousU,
@@ -59,6 +78,7 @@ assert(qp.f.length === defaultConfig.mpc.horizon, 'QP linear term dimension must
 assert(qp.lower.length === defaultConfig.mpc.horizon && qp.upper.length === defaultConfig.mpc.horizon, 'QP bound dimensions must match horizon');
 assert(qpInfo.finite, 'QP formulation contains non-finite values');
 assert(qpInfo.rateConstraintsEnabled, 'Default QP must include hard delta-u constraints');
+assert(!qpInfo.stateConstraintsEnabled && !qpInfo.outputConstraintsEnabled, 'Default baseline should keep state/output envelopes disabled');
 assert(qpInfo.inequalities === 4 * defaultConfig.mpc.horizon, 'Expected input and rate upper/lower inequalities at every horizon stage');
 assert(qpInfo.maxSymmetryError < 1e-9, `QP Hessian is not symmetric: ${qpInfo.maxSymmetryError}`);
 assert(qpInfo.minDiagonal > 0, 'QP Hessian diagonal must be positive for the default problem');
@@ -109,8 +129,50 @@ assert(!constrainedSolution.fallbackUsed, `Constrained QP unexpectedly used fall
 assert(constrainedSolution.diagnostics.finite, 'Constrained QP diagnostics must be finite');
 assert(constrainedSolution.diagnostics.feasibilityViolation <= 1e-6, 'Constrained QP solution violates AU<=b');
 assertRateBounds(constrainedSolution.sequence, qpPreviousU, constrainedConfig.mpc.deltaUMin, constrainedConfig.mpc.deltaUMax);
-const constrainedQP = buildCondensedQP({ A: model.A, B: model.B, state: qpState, target: constrainedConfig.setpoint, previousU: qpPreviousU, cfg: constrainedConfig });
+const constrainedQP = buildCondensedQP({ A: model.A, B: model.B, C: model.C, state: qpState, target: constrainedConfig.setpoint, previousU: qpPreviousU, cfg: constrainedConfig });
 assert(inequalityViolation(constrainedQP.inequalities, constrainedSolution.sequence).maxViolation <= 1e-6, 'Constrained QP sequence fails independent inequality check');
+
+const safetyBase = applyExperimentPreset(defaultConfig, 'safety-envelope');
+const safetyConfig = {
+  ...safetyBase,
+  duration: 2.5,
+  disturbance: { ...safetyBase.disturbance, enabled: false },
+  mpc: {
+    ...safetyBase.mpc,
+    horizon: 16,
+    qpIterations: 180,
+    qpTolerance: 2e-5,
+    qpProjectionCycles: 18,
+  },
+};
+const safetyModel = getStateSpaceModel(safetyConfig);
+const safetyQP = buildCondensedQP({ A: safetyModel.A, B: safetyModel.B, C: safetyModel.C, state: { x: 0, v: 0 }, target: safetyConfig.setpoint, previousU: 0, cfg: safetyConfig });
+const safetyQPInfo = qpDiagnostics(safetyQP);
+assert(safetyQPInfo.stateConstraintsEnabled, 'Safety preset must enable state constraints');
+assert(safetyQPInfo.outputConstraintsEnabled, 'Safety preset must enable output constraints');
+assert(safetyQPInfo.inequalities > 4 * safetyConfig.mpc.horizon, 'Safety preset must add prediction inequalities beyond input/rate bounds');
+const safetySolution = solveConstrainedQPMPC({ x: 0, v: 0 }, safetyConfig.setpoint, 0, safetyConfig, null);
+assert(!safetySolution.fallbackUsed, `Safety-envelope QP unexpectedly used fallback: ${safetySolution.fallbackReason}`);
+assert(safetySolution.diagnostics.feasibilityViolation <= 2e-5, 'Safety-envelope QP violates condensed constraints');
+assertPredictedEnvelope(safetySolution.path, safetyConfig);
+const safetyPeriodic = runSimulation('MPC', safetyConfig);
+assert(safetyPeriodic.metrics.maxActualSafetyViolation <= 3e-4, `Nominal periodic MPC left safety envelope: ${safetyPeriodic.metrics.maxActualSafetyViolation}`);
+
+const guardBase = applyExperimentPreset(defaultConfig, 'infeasible-guard');
+const guardConfig = {
+  ...guardBase,
+  mpc: {
+    ...guardBase.mpc,
+    horizon: 8,
+    qpIterations: 12,
+    qpProjectionCycles: 8,
+  },
+};
+const guardSolution = solveConstrainedQPMPC({ x: 0, v: 0 }, guardConfig.setpoint, 0, guardConfig, null);
+assert(guardSolution.status === 'infeasible', `Impossible state envelope must report infeasible, got ${guardSolution.status}`);
+assert(guardSolution.fallbackUsed, 'Impossible state envelope must activate fallback');
+assert(guardSolution.diagnostics.fallbackActuatorFeasible, 'Fallback must preserve actuator/rate feasibility even when state envelope is impossible');
+assertRateBounds(guardSolution.sequence, 0, guardConfig.mpc.deltaUMin, guardConfig.mpc.deltaUMax);
 
 const impossibleConfig = {
   ...constrainedConfig,
@@ -133,3 +195,5 @@ for (const result of results) {
 }
 console.log(`QP: n=${qpInfo.dimension}, inequalities=${qpInfo.inequalities}, symmetryError=${qpInfo.maxSymmetryError.toExponential(2)}, objectiveDeltaError=${objectiveDeltaError.toExponential(2)}`);
 console.log(`ConstrainedQP: status=${constrainedSolution.status}, residual=${constrainedSolution.diagnostics.projectedGradientResidual.toExponential(2)}, feasibility=${constrainedSolution.diagnostics.feasibilityViolation.toExponential(2)}, projections=${constrainedSolution.diagnostics.projectionCycles}`);
+console.log(`SafetyQP: inequalities=${safetyQPInfo.inequalities}, state=${safetyQPInfo.stateConstraintCount}, output=${safetyQPInfo.outputConstraintCount}, plantViolation=${safetyPeriodic.metrics.maxActualSafetyViolation.toExponential(2)}`);
+console.log(`Guard: status=${guardSolution.status}, fallback=${guardSolution.fallbackUsed}, actuatorSafe=${guardSolution.diagnostics.fallbackActuatorFeasible}`);
