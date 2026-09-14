@@ -21,7 +21,18 @@ jobs:
         run: npm install
 
       - name: Control-core smoke test
-        run: npm run smoke
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run smoke 2>&1 | tee smoke.log
+
+      - name: Upload smoke diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-diagnostics-${{ github.run_number }}
+          path: smoke.log
+          if-no-files-found: ignore
 
       - name: Production build
         run: npm run build
