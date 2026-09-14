@@ -18,11 +18,13 @@ for (const item of cases) {
   const presetConfig = applyExperimentPreset(defaultConfig, item.preset);
   const config = {
     ...presetConfig,
-    duration: Math.min(4, presetConfig.duration),
+    duration: Math.min(2.0, presetConfig.duration),
     mpc: {
       ...presetConfig.mpc,
       solver: item.backend,
-      horizon: Math.min(24, presetConfig.mpc.horizon),
+      horizon: Math.min(16, presetConfig.mpc.horizon),
+      qpIterations: Math.min(40, presetConfig.mpc.qpIterations),
+      qpProjectionCycles: Math.min(10, presetConfig.mpc.qpProjectionCycles),
     },
   };
   const result = runSimulation(item.mode, config);
