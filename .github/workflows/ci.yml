@@ -26,12 +26,20 @@ jobs:
           set -o pipefail
           npm run smoke 2>&1 | tee smoke.log
 
-      - name: Upload smoke diagnostics
+      - name: Solver and safety benchmark
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run benchmark 2>&1 | tee benchmark.log
+
+      - name: Upload research diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: smoke-diagnostics-${{ github.run_number }}
-          path: smoke.log
+          name: research-diagnostics-${{ github.run_number }}
+          path: |
+            smoke.log
+            benchmark.log
           if-no-files-found: ignore
 
       - name: Production build
