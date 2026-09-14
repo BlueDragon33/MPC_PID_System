@@ -17,6 +17,24 @@ function denseRow(row, dimension) {
   return out;
 }
 
+function sparseFromDense(values, epsilon = 1e-14) {
+  const indices = [];
+  const sparseValues = [];
+  for (let i = 0; i < values.length; i += 1) {
+    if (Math.abs(values[i]) > epsilon) {
+      indices.push(i);
+      sparseValues.push(values[i]);
+    }
+  }
+  return { indices, values: sparseValues };
+}
+
+function addDenseConstraint(rows, coefficients, bound, kind, stage, meta = {}) {
+  if (!Number.isFinite(bound)) return;
+  const sparse = sparseFromDense(coefficients);
+  rows.push({ ...sparse, bound, kind, stage, ...meta });
+}
+
 export function buildInputRateInequalities({ horizon, uMin, uMax, deltaUMin, deltaUMax, previousU }) {
   const rows = [];
   const add = (indices, values, bound, kind, stage) => rows.push({ indices, values, bound, kind, stage });
@@ -44,8 +62,6 @@ export function buildInputRateInequalities({ horizon, uMin, uMax, deltaUMin, del
 
   return {
     rows,
-    A: rows.map((row) => denseRow(row, horizon)),
-    b: rows.map((row) => row.bound),
     dimension: horizon,
     rateEnabled,
     deltaUMin: duMin,
@@ -53,21 +69,97 @@ export function buildInputRateInequalities({ horizon, uMin, uMax, deltaUMin, del
     uMin,
     uMax,
     previousU,
-    form: 'A * U <= b',
+    stateConstraintsEnabled: false,
+    outputConstraintsEnabled: false,
   };
+}
+
+export function appendPredictionInequalities(inequalities, {
+  Gamma,
+  freePrediction,
+  horizon,
+  stateDimension = 2,
+  outputC = [1, 0],
+  positionMin,
+  positionMax,
+  velocityMin,
+  velocityMax,
+  outputMin,
+  outputMax,
+}) {
+  const rows = inequalities.rows;
+  let stateCount = 0;
+  let outputCount = 0;
+
+  for (let k = 0; k < horizon; k += 1) {
+    const xRowIndex = k * stateDimension;
+    const vRowIndex = xRowIndex + 1;
+    const gx = Gamma[xRowIndex];
+    const gv = Gamma[vRowIndex];
+    const freeX = freePrediction[xRowIndex];
+    const freeV = freePrediction[vRowIndex];
+
+    if (Number.isFinite(positionMax)) {
+      addDenseConstraint(rows, gx, positionMax - freeX, 'state-position-upper', k, { variable: 'position' });
+      stateCount += 1;
+    }
+    if (Number.isFinite(positionMin)) {
+      addDenseConstraint(rows, gx.map((value) => -value), freeX - positionMin, 'state-position-lower', k, { variable: 'position' });
+      stateCount += 1;
+    }
+    if (Number.isFinite(velocityMax)) {
+      addDenseConstraint(rows, gv, velocityMax - freeV, 'state-velocity-upper', k, { variable: 'velocity' });
+      stateCount += 1;
+    }
+    if (Number.isFinite(velocityMin)) {
+      addDenseConstraint(rows, gv.map((value) => -value), freeV - velocityMin, 'state-velocity-lower', k, { variable: 'velocity' });
+      stateCount += 1;
+    }
+
+    const outputGamma = gx.map((value, j) => (outputC[0] ?? 0) * value + (outputC[1] ?? 0) * gv[j]);
+    const freeOutput = (outputC[0] ?? 0) * freeX + (outputC[1] ?? 0) * freeV;
+    if (Number.isFinite(outputMax)) {
+      addDenseConstraint(rows, outputGamma, outputMax - freeOutput, 'output-upper', k, { variable: 'output' });
+      outputCount += 1;
+    }
+    if (Number.isFinite(outputMin)) {
+      addDenseConstraint(rows, outputGamma.map((value) => -value), freeOutput - outputMin, 'output-lower', k, { variable: 'output' });
+      outputCount += 1;
+    }
+  }
+
+  inequalities.stateConstraintsEnabled = stateCount > 0;
+  inequalities.outputConstraintsEnabled = outputCount > 0;
+  inequalities.stateConstraintCount = stateCount;
+  inequalities.outputConstraintCount = outputCount;
+  inequalities.A = rows.map((row) => denseRow(row, inequalities.dimension));
+  inequalities.b = rows.map((row) => row.bound);
+  inequalities.form = 'A * U <= b';
+  return inequalities;
+}
+
+export function finalizeInequalities(inequalities) {
+  inequalities.A = inequalities.rows.map((row) => denseRow(row, inequalities.dimension));
+  inequalities.b = inequalities.rows.map((row) => row.bound);
+  inequalities.form = 'A * U <= b';
+  return inequalities;
 }
 
 export function inequalityViolation(inequalities, x) {
   let maxViolation = 0;
   let violated = 0;
+  let worst = null;
   for (const row of inequalities.rows) {
     const amount = sparseDot(row, x) - row.bound;
     if (amount > 0) {
       violated += 1;
-      maxViolation = Math.max(maxViolation, amount);
+      if (amount > maxViolation) {
+        maxViolation = amount;
+        worst = { kind: row.kind, stage: row.stage, amount };
+      }
     }
   }
-  return { maxViolation, violated };
+  return { maxViolation, violated, worst };
 }
 
 export function activeInequalityStats(inequalities, x, tolerance = 1e-6) {
@@ -127,7 +219,8 @@ export function repairInputRateFeasibility(inequalities, input, tolerance = 1e-1
     previous = x[i];
   }
 
-  const violation = inequalityViolation(inequalities, x);
+  const inputRateRows = { ...inequalities, rows: inequalities.rows.filter((row) => row.kind.startsWith('input-') || row.kind.startsWith('rate-')) };
+  const violation = inequalityViolation(inputRateRows, x);
   return {
     x,
     feasible: violation.maxViolation <= Math.max(tolerance, 1e-12),
@@ -137,10 +230,7 @@ export function repairInputRateFeasibility(inequalities, input, tolerance = 1e-1
   };
 }
 
-export function projectPolyhedronDykstra(inequalities, input, options = {}) {
-  const maxCycles = Math.max(1, Math.round(options.maxCycles ?? 12));
-  const tolerance = Math.max(1e-14, options.tolerance ?? 1e-9);
-  const rows = inequalities.rows;
+function runDykstra(rows, input, maxCycles, tolerance) {
   const x = [...input];
   const corrections = rows.map((row) => new Array(row.indices.length).fill(0));
   let cycles = 0;
@@ -170,20 +260,46 @@ export function projectPolyhedronDykstra(inequalities, input, options = {}) {
     }
 
     cycles = cycle;
-    if (inequalityViolation(inequalities, x).maxViolation <= tolerance) break;
+    const current = { rows };
+    if (inequalityViolation(current, x).maxViolation <= tolerance) break;
   }
 
-  const preRepair = inequalityViolation(inequalities, x);
-  const repaired = repairInputRateFeasibility(inequalities, x, tolerance);
-  const feasibility = inequalityViolation(inequalities, repaired.x);
+  return { x, cycles };
+}
 
+export function projectPolyhedronDykstra(inequalities, input, options = {}) {
+  const maxCycles = Math.max(1, Math.round(options.maxCycles ?? 12));
+  const tolerance = Math.max(1e-14, options.tolerance ?? 1e-9);
+  const generalConstraints = inequalities.stateConstraintsEnabled || inequalities.outputConstraintsEnabled;
+
+  let projection = runDykstra(inequalities.rows, input, maxCycles, tolerance);
+  let x = projection.x;
+  let cycles = projection.cycles;
+  let preRepair = inequalityViolation(inequalities, x);
+  let repairUsed = false;
+
+  if (!generalConstraints && preRepair.maxViolation > tolerance) {
+    const repaired = repairInputRateFeasibility(inequalities, x, tolerance);
+    x = repaired.x;
+    repairUsed = true;
+  } else if (generalConstraints && preRepair.maxViolation > tolerance) {
+    // General state/output rows need the true polyhedral projection. Give Dykstra
+    // an adaptive refinement budget instead of applying a rate-only repair that
+    // could silently violate a predicted safety envelope.
+    const refinement = runDykstra(inequalities.rows, x, Math.max(maxCycles * 4, 24), tolerance);
+    x = refinement.x;
+    cycles += refinement.cycles;
+  }
+
+  const feasibility = inequalityViolation(inequalities, x);
   return {
-    x: repaired.x,
+    x,
     cycles,
     dykstraConverged: preRepair.maxViolation <= tolerance,
-    repairUsed: preRepair.maxViolation > tolerance,
-    converged: repaired.feasible && feasibility.maxViolation <= tolerance,
+    repairUsed,
+    converged: feasibility.maxViolation <= tolerance,
     maxViolation: feasibility.maxViolation,
     violated: feasibility.violated,
+    worstViolation: feasibility.worst,
   };
 }
