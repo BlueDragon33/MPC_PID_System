@@ -1,3 +1,5 @@
+import { buildInputRateInequalities } from './constraints.js';
+
 const zeros = (rows, cols) => Array.from({ length: rows }, () => new Array(cols).fill(0));
 const identity = (n) => Array.from({ length: n }, (_, i) => Array.from({ length: n }, (_, j) => (i === j ? 1 : 0)));
 
@@ -128,11 +130,23 @@ export function buildCondensedQP({ A, B, state, target, previousU, cfg }) {
   const deltaLinear = scaleVector(matVec(Dt, deltaReference), -cfg.mpc.rDelta);
   const f = scaleVector(addVectors(stateLinear, deltaLinear), 2);
 
+  const lower = new Array(N).fill(cfg.mpc.uMin);
+  const upper = new Array(N).fill(cfg.mpc.uMax);
+  const inequalities = buildInputRateInequalities({
+    horizon: N,
+    uMin: cfg.mpc.uMin,
+    uMax: cfg.mpc.uMax,
+    deltaUMin: cfg.mpc.deltaUMin,
+    deltaUMax: cfg.mpc.deltaUMax,
+    previousU,
+  });
+
   return {
     H,
     f,
-    lower: new Array(N).fill(cfg.mpc.uMin),
-    upper: new Array(N).fill(cfg.mpc.uMax),
+    lower,
+    upper,
+    inequalities,
     Phi,
     Gamma,
     Qbar,
@@ -140,7 +154,7 @@ export function buildCondensedQP({ A, B, state, target, previousU, cfg }) {
     D,
     reference,
     freePrediction,
-    form: '0.5 * U^T H U + f^T U',
+    form: '0.5 * U^T H U + f^T U, subject to A * U <= b',
   };
 }
 
@@ -164,5 +178,13 @@ export function qpDiagnostics(qp) {
     }
   }
 
-  return { dimension: n, maxSymmetryError, minDiagonal, finite };
+  const constraintFinite = qp.inequalities.rows.every((row) => Number.isFinite(row.bound) && row.values.every(Number.isFinite));
+  return {
+    dimension: n,
+    inequalities: qp.inequalities.rows.length,
+    rateConstraintsEnabled: qp.inequalities.rateEnabled,
+    maxSymmetryError,
+    minDiagonal,
+    finite: finite && constraintFinite,
+  };
 }
