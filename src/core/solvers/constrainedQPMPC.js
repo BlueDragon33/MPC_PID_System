@@ -5,6 +5,7 @@ import {
   inequalityViolation,
   precheckInputRateFeasibility,
   projectPolyhedronDykstra,
+  repairInputRateFeasibility,
 } from '../mpc/constraints.js';
 import { rolloutMPCSequence } from '../mpc/rollout.js';
 
@@ -59,12 +60,19 @@ function finiteVector(x) {
 }
 
 function fallbackSequence(qp, previousU, cfg) {
+  // Safety hierarchy: actuator magnitude and slew-rate limits are physical hard
+  // constraints. If a predicted state/output envelope is infeasible, fallback
+  // keeps the actuator plan valid and reports the remaining envelope violation.
   const seed = new Array(cfg.mpc.horizon).fill(previousU);
-  const projected = projectPolyhedronDykstra(qp.inequalities, seed, {
-    maxCycles: Math.max(20, cfg.mpc.qpProjectionCycles ?? 10),
-    tolerance: cfg.mpc.qpProjectionTolerance ?? 1e-10,
-  });
-  return { sequence: projected.x, feasible: projected.maxViolation <= (cfg.mpc.qpFeasibilityTolerance ?? 1e-7) };
+  const repaired = repairInputRateFeasibility(qp.inequalities, seed, cfg.mpc.qpFeasibilityTolerance ?? 1e-7);
+  const sequence = repaired.x;
+  const overall = inequalityViolation(qp.inequalities, sequence);
+  return {
+    sequence,
+    actuatorFeasible: repaired.feasible,
+    allConstraintsFeasible: overall.maxViolation <= (cfg.mpc.qpFeasibilityTolerance ?? 1e-7),
+    overallViolation: overall,
+  };
 }
 
 function buildFailureResult({ qp, state, target, previousU, cfg, started, status, reason, diagnostics = {} }) {
@@ -90,12 +98,15 @@ function buildFailureResult({ qp, state, target, previousU, cfg, started, status
       iterations: diagnostics.iterations ?? 0,
       projectedGradientResidual: diagnostics.projectedGradientResidual ?? Number.POSITIVE_INFINITY,
       feasibilityViolation: feasibility.maxViolation,
+      violatedConstraints: feasibility.violated,
+      worstViolation: feasibility.worst,
       activeConstraints: activeInequalityStats(qp.inequalities, sequence).total,
       activeConstraintRatio: activeInequalityStats(qp.inequalities, sequence).ratio,
       projectionCycles: diagnostics.projectionCycles ?? 0,
       restarts: diagnostics.restarts ?? 0,
       finite: finiteVector(sequence),
-      fallbackFeasible: fallback.feasible,
+      fallbackActuatorFeasible: fallback.actuatorFeasible,
+      fallbackAllConstraintsFeasible: fallback.allConstraintsFeasible,
       precheck: diagnostics.precheck ?? null,
     },
   };
@@ -103,8 +114,8 @@ function buildFailureResult({ qp, state, target, previousU, cfg, started, status
 
 export function solveConstrainedQPMPC(state, target, previousU, cfg, warmStart = null) {
   const started = now();
-  const { A, B } = createSecondOrderModel(cfg);
-  const qp = buildCondensedQP({ A, B, state, target, previousU, cfg });
+  const { A, B, C } = createSecondOrderModel(cfg);
+  const qp = buildCondensedQP({ A, B, C, state, target, previousU, cfg });
   const precheck = precheckInputRateFeasibility(qp.inequalities, previousU, cfg.mpc.uMin, cfg.mpc.uMax);
 
   if (!precheck.feasible) {
@@ -202,7 +213,7 @@ export function solveConstrainedQPMPC(state, target, previousU, cfg, warmStart =
     return buildFailureResult({
       qp, state, target, previousU, cfg, started,
       status: 'infeasible',
-      reason: 'projection-could-not-reach-feasible-set',
+      reason: feasibility.worst ? `constraint-unreachable:${feasibility.worst.kind}@${feasibility.worst.stage}` : 'projection-could-not-reach-feasible-set',
       diagnostics: {
         iterations,
         projectedGradientResidual: residualInfo.residual,
@@ -236,9 +247,14 @@ export function solveConstrainedQPMPC(state, target, previousU, cfg, warmStart =
       projectedGradientResidual: residualInfo.residual,
       feasibilityViolation: feasibility.maxViolation,
       violatedConstraints: feasibility.violated,
+      worstViolation: feasibility.worst,
       activeConstraints: active.total,
       activeConstraintRatio: active.ratio,
       activeByKind: active.byKind,
+      stateConstraintsEnabled: qp.inequalities.stateConstraintsEnabled,
+      outputConstraintsEnabled: qp.inequalities.outputConstraintsEnabled,
+      stateConstraintCount: qp.inequalities.stateConstraintCount || 0,
+      outputConstraintCount: qp.inequalities.outputConstraintCount || 0,
       lipschitzEstimate: lipschitz,
       stepSize: step,
       projectionCycles,
