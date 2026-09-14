@@ -33,6 +33,12 @@ export const EXPERIMENT_PRESETS = [
     label: 'Predicted safety envelope',
     description: 'Constrains future velocity and measured output so MPC must anticipate the safe region before PID reacts.',
     patch: {
+      safety: {
+        previewHorizon: 8,
+        positionMargin: 0,
+        velocityMargin: 0,
+        outputMargin: 0,
+      },
       mpc: {
         stateConstraintsEnabled: true,
         positionMin: -1.5,
@@ -54,6 +60,12 @@ export const EXPERIMENT_PRESETS = [
     label: 'Disturbance stress test',
     description: 'Large plant-only disturbance used to study trigger density, recovery and constraint activation.',
     patch: {
+      safety: {
+        previewHorizon: 10,
+        positionMargin: 0,
+        velocityMargin: 0,
+        outputMargin: 0,
+      },
       mpc: {
         stateConstraintsEnabled: true,
         positionMin: -1.8,
@@ -81,6 +93,7 @@ export const EXPERIMENT_PRESETS = [
     description: 'Deliberately impossible first-step velocity envelope; validates explicit infeasibility and safe actuator fallback.',
     patch: {
       duration: 2.0,
+      safety: { previewHorizon: 6 },
       mpc: {
         stateConstraintsEnabled: true,
         positionMin: -1.5,
@@ -110,6 +123,7 @@ export function applyExperimentPreset(baseConfig, id) {
     plant: { ...baseConfig.plant, ...(patch.plant || {}) },
     pid: { ...baseConfig.pid, ...(patch.pid || {}) },
     mpc: { ...baseConfig.mpc, ...(patch.mpc || {}) },
+    safety: { ...baseConfig.safety, ...(patch.safety || {}) },
     trigger: { ...baseConfig.trigger, ...(patch.trigger || {}) },
     disturbance: { ...baseConfig.disturbance, ...(patch.disturbance || {}) },
   };
