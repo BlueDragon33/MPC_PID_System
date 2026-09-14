@@ -10,6 +10,11 @@
 .constraint-warning { padding:8px 9px; border:1px solid #6a5130; background:#20170c; color:#e0be86; border-radius:7px; }
 .constraint-note { color:#638275; }
 .envelope-grid { padding:5px 0 7px; }
+.experiment-actions { display:grid; grid-template-columns:repeat(4,1fr); gap:5px; margin:9px 0 5px; }
+.experiment-actions button { display:flex; align-items:center; justify-content:center; gap:5px; padding:7px 5px; border:1px solid #294d3b; border-radius:6px; background:#091813; color:#9fcbb4; font-size:9px; cursor:pointer; }
+.experiment-actions button:hover { border-color:#4c8066; color:#d1efdf; }
+.hidden-file-input { display:none; }
+.experiment-status { margin:5px 0 9px; color:#6f9e85; font-size:9px; line-height:1.4; }
 .solver-badge { display:inline-flex; align-items:center; gap:7px; padding:5px 9px; border:1px solid #315984; background:#0b1c30; color:#9fc7ff; border-radius:999px; font-size:10px; letter-spacing:.05em; text-transform:uppercase; }
 .diagnostics-panel { margin-top:14px; padding:20px; }
 .diagnostics-grid { display:grid; grid-template-columns:repeat(6,1fr); gap:10px; }
@@ -26,4 +31,4 @@
 .solver-note { color:#6d7f97; font-size:11px; line-height:1.6; margin:12px 0 0; }
 @media(max-width:1550px){.diagnostics-grid-wide{grid-template-columns:repeat(4,1fr)}}
 @media(max-width:1450px){.diagnostics-grid{grid-template-columns:repeat(3,1fr)}}
-@media(max-width:1100px){.diagnostics-grid,.diagnostics-grid-wide{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:1100px){.diagnostics-grid,.diagnostics-grid-wide{grid-template-columns:repeat(2,1fr)}.experiment-actions{grid-template-columns:repeat(2,1fr)}}
