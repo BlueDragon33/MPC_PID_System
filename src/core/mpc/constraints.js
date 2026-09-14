@@ -1,4 +1,5 @@
 const finiteOr = (value, fallback) => Number.isFinite(value) ? value : fallback;
+const clamp = (value, lower, upper) => Math.max(lower, Math.min(upper, value));
 
 function sparseDot(row, x) {
   let sum = 0;
@@ -49,6 +50,9 @@ export function buildInputRateInequalities({ horizon, uMin, uMax, deltaUMin, del
     rateEnabled,
     deltaUMin: duMin,
     deltaUMax: duMax,
+    uMin,
+    uMax,
+    previousU,
     form: 'A * U <= b',
   };
 }
@@ -102,6 +106,37 @@ export function precheckInputRateFeasibility(inequalities, previousU, uMin, uMax
   return { feasible: true, reason: 'ok' };
 }
 
+export function repairInputRateFeasibility(inequalities, input, tolerance = 1e-12) {
+  const x = [...input];
+  let previous = inequalities.previousU;
+
+  for (let i = 0; i < x.length; i += 1) {
+    let lower = inequalities.uMin;
+    let upper = inequalities.uMax;
+
+    if (inequalities.rateEnabled) {
+      if (Number.isFinite(inequalities.deltaUMin)) lower = Math.max(lower, previous + inequalities.deltaUMin);
+      if (Number.isFinite(inequalities.deltaUMax)) upper = Math.min(upper, previous + inequalities.deltaUMax);
+    }
+
+    if (lower > upper + tolerance) {
+      return { x, feasible: false, reason: 'rate-input-intersection-empty', stage: i, lower, upper };
+    }
+
+    x[i] = clamp(x[i], lower, upper);
+    previous = x[i];
+  }
+
+  const violation = inequalityViolation(inequalities, x);
+  return {
+    x,
+    feasible: violation.maxViolation <= Math.max(tolerance, 1e-12),
+    reason: violation.maxViolation <= Math.max(tolerance, 1e-12) ? 'ok' : 'repair-residual',
+    maxViolation: violation.maxViolation,
+    violated: violation.violated,
+  };
+}
+
 export function projectPolyhedronDykstra(inequalities, input, options = {}) {
   const maxCycles = Math.max(1, Math.round(options.maxCycles ?? 12));
   const tolerance = Math.max(1e-14, options.tolerance ?? 1e-9);
@@ -138,11 +173,16 @@ export function projectPolyhedronDykstra(inequalities, input, options = {}) {
     if (inequalityViolation(inequalities, x).maxViolation <= tolerance) break;
   }
 
-  const feasibility = inequalityViolation(inequalities, x);
+  const preRepair = inequalityViolation(inequalities, x);
+  const repaired = repairInputRateFeasibility(inequalities, x, tolerance);
+  const feasibility = inequalityViolation(inequalities, repaired.x);
+
   return {
-    x,
+    x: repaired.x,
     cycles,
-    converged: feasibility.maxViolation <= tolerance,
+    dykstraConverged: preRepair.maxViolation <= tolerance,
+    repairUsed: preRepair.maxViolation > tolerance,
+    converged: repaired.feasible && feasibility.maxViolation <= tolerance,
     maxViolation: feasibility.maxViolation,
     violated: feasibility.violated,
   };
