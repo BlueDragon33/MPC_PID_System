@@ -1,17 +1,19 @@
 # MPC_PID_System
 
-Web-app nghiên cứu và mô phỏng kiến trúc điều khiển lai **MPC/NMPC + Event Trigger + PID**.
+Web-app nghiên cứu và mô phỏng kiến trúc điều khiển lai **MPC/NMPC + Event Trigger + PID + State Estimation + Safety Governor**.
 
 ## Mục tiêu
 
-Dự án không dừng ở dashboard minh họa. Đích đến là một **Control Research Workbench** dùng để học, thiết kế, mô phỏng, benchmark và dần tiến tới triển khai trên phần cứng thật.
+Dự án là một **Control Research Workbench** để học, thiết kế, mô phỏng, benchmark và tiến dần tới triển khai trên UAV/UGV/USV và phần cứng thật.
 
 Flow cốt lõi:
 
 ```text
 Reference / Planner
         ↓
- State Estimator
+      Sensor
+        ↓
+ State / disturbance estimator
         ↓
  Prediction Monitor
         ↓
@@ -23,16 +25,14 @@ Reference / Planner
         ↓
  Fast PID / LQR loop
         ↓
- Actuator / Plant
+ Safety Governor
         ↓
-      Sensor
+ Actuator / Plant
 ```
 
-## V0.3C hiện tại — Predicted Safety Envelope + Reproducible Experiments
+## Trạng thái hiện tại
 
-Lõi MPC đã chuyển từ box-only sang general constrained research core.
-
-### Prediction + optimization
+### Constrained MPC
 
 ```text
 X = Φ x₀ + Γ U
@@ -43,7 +43,7 @@ min  0.5 Uᵀ H U + fᵀ U
 s.t. A U <= b
 ```
 
-Constraint polyhedron hiện hỗ trợ:
+Constraint stack hỗ trợ:
 
 - hard input bounds,
 - hard slew-rate / `Δu`,
@@ -51,97 +51,82 @@ Constraint polyhedron hiện hỗ trợ:
 - predicted velocity bounds,
 - predicted output bounds.
 
-State/output inequalities được sinh trực tiếp từ `Φ`, `Γ` và free response, không nhét thủ công vào controller.
+Ba solver backend được giữ để nghiên cứu chéo:
 
-### Solver stack
+- `constrained-qp` — backend chính cho general `AU<=b`,
+- `box-qp` — QP baseline cho input box,
+- `projected-gradient` — sequence-optimization baseline.
 
-Ba backend được giữ để nghiên cứu chéo:
+### Event-triggered predictive guidance
 
-- `constrained-qp`: backend chính cho general `AU<=b`,
-- `box-qp`: QP baseline cho input box,
-- `projected-gradient`: sequence-optimization baseline.
+MPC không solve ở mọi sample. Event Trigger quyết định khi nào prediction cũ không còn đủ tốt; giữa các lần solve hệ reuse phần MPC plan còn lại.
 
-`constrained-qp` có:
+PID vẫn là fast feedback loop và nhận predictive reference từ MPC.
 
-- warm start,
-- accelerated projected gradient,
-- sparse Dykstra projection,
-- adaptive projection refinement khi state/output constraints được bật,
-- explicit status: `solved`, `max-iterations`, `timeout`, `infeasible`, `numerical-failure`,
-- feasibility + stationarity diagnostics,
-- active-constraint statistics,
-- safe fallback semantics.
+### Safety Governor
 
-Khi state/output envelope bất khả thi, fallback ưu tiên giữ **actuator magnitude + slew-rate constraints** hợp lệ và báo rõ envelope nào không thể thỏa. Nó không cố “cứu” state constraint bằng cách phát lệnh actuator phi vật lý.
+Guidance-only không được xem là hard safety guarantee. Governor kiểm tra PID first move và dùng MPC continuation plan để xây short-horizon admissible command interval.
 
-### Model safety vs real plant safety
+Benchmark đại diện:
 
-V0.3C tách hai khái niệm:
+```text
+Hybrid guidance-only plant violation: > 0
+Hybrid + Safety Governor violation:    0
+Safety intervention rate:              ~2.5%
+```
 
-1. **QP/model feasibility** — quỹ đạo MPC dự đoán có thỏa `AU<=b` hay không.
-2. **Actual plant safety** — plant thật sau PID + disturbance có thực sự còn trong envelope hay không.
+Actuator/rate/plan conditioning được đo riêng khỏi state/output safety intervention.
 
-Điểm này đặc biệt quan trọng cho hybrid guidance-only: MPC tạo reference cho PID nhưng PID vẫn là execution loop riêng. Do đó predicted feasibility chưa tự động đồng nghĩa với hard safety guarantee của plant thật.
+### Linear Kalman state estimation
 
-Dashboard hiển thị riêng:
+Khi estimation bật:
 
-- max QP feasibility violation,
-- max actual safety violation,
-- unsafe sample rate,
-- fraction of solves touching state/output boundary,
-- fallback / timeout / infeasible counts.
+- sensor sinh measurement noisy theo seed cố định,
+- Kalman Filter tạo `x_hat`, `v_hat` và covariance `P`,
+- Event Trigger, MPC, PID và Safety Governor đều dùng estimated state,
+- ground truth chỉ dùng để mô phỏng plant và audit.
 
-### Reproducible experiment system
+Kết quả regression đại diện:
 
-Có các preset:
+```text
+measurement RMSE: 0.0986
+x-hat RMSE:       0.0546
+v-hat RMSE:       0.2161
+MPC convergence:  100%
+fallback:          0
+plant violation:   0
+```
+
+### Covariance-aware safety tightening
+
+```text
+Δx = kσ sqrt(Pxx)
+Δv = kσ sqrt(Pvv)
+Δy = kσ sqrt(C P Cᵀ)
+```
+
+MPC/Governor dùng envelope đã co để bù uncertainty của estimator. Actual plant safety vẫn được audit bằng envelope gốc.
+
+Sensitivity benchmark hiện chọn `kσ = 1.5` cho preset noisy-estimation vì 2σ trở lên bắt đầu làm solver fallback trong scenario hiện tại.
+
+### Reproducible experiments
+
+Preset hiện có gồm:
 
 - `baseline`,
 - `rate-limited`,
 - `safety-envelope`,
 - `disturbance-stress`,
+- `noisy-estimation`,
 - `infeasible-guard`.
 
-Experiment dùng schema versioned:
+Experiment dùng schema:
 
 ```text
 mpc-pid-experiment/v1
 ```
 
-Web-app hỗ trợ:
-
-- Save local,
-- Load local,
-- Export JSON,
-- Import JSON.
-
-Điều này cho phép một scenario được chạy lại đúng cấu hình thay vì phụ thuộc thao tác tay.
-
-### Regression + benchmark
-
-Smoke test kiểm tra:
-
-- state/control hữu hạn,
-- event-trigger giảm số lần solve,
-- condensed objective ↔ rollout objective,
-- Hessian symmetry,
-- hard input bounds,
-- hard `Δu`,
-- independent `AU<=b` feasibility,
-- predicted state/output envelope,
-- impossible-envelope infeasibility,
-- actuator-safe fallback.
-
-`npm run benchmark` so sánh solver, periodic MPC và hybrid theo:
-
-- IAE,
-- solve count,
-- average/max solve time,
-- convergence,
-- fallback,
-- QP feasibility violation,
-- actual plant safety violation.
-
-CI lưu cả `smoke.log` và `benchmark.log` làm research artifacts.
+Web-app hỗ trợ Save/Load local, Export/Import JSON. CI lưu `smoke.log` và `benchmark.log` làm research artifacts.
 
 ## Cấu trúc lõi
 
@@ -151,6 +136,10 @@ src/core/
 │   └── secondOrderPlant.js
 ├── controllers/
 │   └── pid.js
+├── estimation/
+│   ├── linearKalmanFilter.js
+│   ├── measurementSensor.js
+│   └── uncertaintyTightening.js
 ├── experiments/
 │   ├── presets.js
 │   └── serialization.js
@@ -158,6 +147,8 @@ src/core/
 │   ├── condensedQP.js
 │   ├── constraints.js
 │   └── rollout.js
+├── safety/
+│   └── shortHorizonGovernor.js
 ├── solvers/
 │   ├── index.js
 │   ├── constrainedQPMPC.js
@@ -168,70 +159,22 @@ src/core/
 └── simulator.js
 ```
 
-`simulator.js` chỉ orchestration. Plant, controller, QP formulation, constraints, solver, experiment schema và trigger policy được tách độc lập.
-
 ## Research gates
 
-### Gate A — Linear research core — PASS
-- State-space plant.
-- PID benchmark.
-- MPC sequence optimization.
-- Event-trigger + watchdog.
-- Disturbance response.
-- Compute profiling.
+- Linear research core — PASS
+- Event-triggered predictive guidance — PASS
+- Condensed QP + box constraints — PASS
+- General input/rate constrained MPC — PASS
+- Predicted state/output safety — PASS
+- Safety Governor / admissibility filter — PASS
+- Linear Kalman state estimation + covariance-aware safety — PASS
+- **Model mismatch + disturbance-state estimation — ACTIVE**
+- Nonlinear UGV/UAV/USV models — NEXT
+- NMPC — LATER
+- Adaptive / Learning MPC — LATER
+- HIL / hardware timing validation — LATER
 
-### Gate B1 — Condensed QP + box constraints — PASS
-- `Φ`, `Γ`, `H`, `f`.
-- Hard input bounds.
-- Solver adapter.
-- QP optimality/feasibility diagnostics.
-
-### Gate B2 — General input/rate constrained MPC — PASS
-- Generic `AU<=b`.
-- Hard `Δu`.
-- Explicit infeasibility/failure semantics.
-- Actuator-safe fallback.
-
-### Gate B3 — Predicted state/output safety + reproducible experiments — ACTIVE
-Đã có:
-- predicted position/velocity/output inequalities,
-- safety-envelope scenarios,
-- versioned experiment JSON,
-- save/load/import/export,
-- internal solver + safety benchmark,
-- real-plant safety audit.
-
-Còn quyết định research gate kế tiếp:
-- nếu hybrid guidance-only cho thấy plant-safety gap đáng kể, thêm **Safety Governor / admissibility filter** trước State Estimation,
-- external QP/WASM backend chỉ thêm khi benchmark chứng minh backend hiện tại là bottleneck hoặc constraint scale đòi hỏi.
-
-### Gate C — State estimation
-- Observer / Kalman Filter.
-- Measurement noise.
-- Model mismatch.
-- EKF / UKF khi chuyển nonlinear.
-
-### Gate D — Autonomous plant models
-- UGV bicycle model.
-- UAV attitude/position model.
-- USV planar model.
-- Trajectory tracking + constraints + disturbances.
-
-### Gate E — NMPC and intelligence
-- Nonlinear prediction.
-- NMPC solver.
-- Online system identification.
-- Adaptive trigger threshold.
-- Learning residual dynamics / Learning MPC.
-
-### Gate F — Hardware path
-- HIL interface.
-- Telemetry ingestion.
-- Timing benchmark trên STM32/ESP32/SoC.
-- Export controller configuration.
-- Real plant validation.
-
-Chi tiết gate nằm trong [`docs/RESEARCH_DIRECTION.md`](docs/RESEARCH_DIRECTION.md).
+Chi tiết nằm trong [`docs/RESEARCH_DIRECTION.md`](docs/RESEARCH_DIRECTION.md).
 
 ## Chạy local
 
