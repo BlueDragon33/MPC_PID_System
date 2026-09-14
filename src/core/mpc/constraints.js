@@ -106,31 +106,32 @@ export function projectPolyhedronDykstra(inequalities, input, options = {}) {
   const maxCycles = Math.max(1, Math.round(options.maxCycles ?? 12));
   const tolerance = Math.max(1e-14, options.tolerance ?? 1e-9);
   const rows = inequalities.rows;
-  let x = [...input];
-  const corrections = rows.map(() => null);
+  const x = [...input];
+  const corrections = rows.map((row) => new Array(row.indices.length).fill(0));
   let cycles = 0;
 
   for (let cycle = 1; cycle <= maxCycles; cycle += 1) {
     for (let r = 0; r < rows.length; r += 1) {
       const row = rows[r];
       const correction = corrections[r];
-      const y = [...x];
-      if (correction) {
-        for (let k = 0; k < row.indices.length; k += 1) y[row.indices[k]] += correction[k];
+      const yValues = new Array(row.indices.length);
+      let dot = 0;
+
+      for (let k = 0; k < row.indices.length; k += 1) {
+        const y = x[row.indices[k]] + correction[k];
+        yValues[k] = y;
+        dot += row.values[k] * y;
       }
 
-      const excess = sparseDot(row, y) - row.bound;
+      const excess = dot - row.bound;
       const norm2 = rowNormSquared(row);
-      const next = [...y];
-      if (excess > 0 && norm2 > 0) {
-        const scale = excess / norm2;
-        for (let k = 0; k < row.indices.length; k += 1) next[row.indices[k]] -= scale * row.values[k];
-      }
+      const scale = excess > 0 && norm2 > 0 ? excess / norm2 : 0;
 
-      const newCorrection = new Array(row.indices.length);
-      for (let k = 0; k < row.indices.length; k += 1) newCorrection[k] = y[row.indices[k]] - next[row.indices[k]];
-      corrections[r] = newCorrection;
-      x = next;
+      for (let k = 0; k < row.indices.length; k += 1) {
+        const next = yValues[k] - scale * row.values[k];
+        correction[k] = yValues[k] - next;
+        x[row.indices[k]] = next;
+      }
     }
 
     cycles = cycle;
