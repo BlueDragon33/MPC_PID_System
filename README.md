@@ -4,7 +4,7 @@ Web-app nghiên cứu và mô phỏng kiến trúc điều khiển lai **MPC/NMP
 
 ## Mục tiêu
 
-Không xây một dashboard minh họa đơn giản. Dự án hướng tới một **Control Research Workbench** có thể dùng để học, thiết kế, mô phỏng, so sánh và dần tiến tới triển khai thuật toán trên phần cứng thật.
+Dự án không dừng ở dashboard minh họa. Đích đến là một **Control Research Workbench** dùng để học, thiết kế, mô phỏng, benchmark và dần tiến tới triển khai trên phần cứng thật.
 
 Flow cốt lõi:
 
@@ -17,7 +17,7 @@ Reference / Planner
         ↓
  Event Trigger ────────┐
         ↓              │
-    MPC / NMPC         │ reuse previous prediction
+    MPC / NMPC         │ reuse previous plan
         ↓              │
  Optimal reference  ←──┘
         ↓
@@ -28,70 +28,83 @@ Reference / Planner
       Sensor
 ```
 
-## V0.1 hiện tại
+## V0.2 hiện tại
 
 - React + Vite web-app.
-- Mô hình plant rời rạc bậc hai đơn giản.
-- PID controller độc lập.
-- MPC finite-horizon educational solver.
-- Hybrid MPC → PID.
-- Event trigger dựa trên prediction error, state error và watchdog timeout.
-- So sánh trực tiếp PID / MPC / Event-triggered MPC+PID.
+- Plant rời rạc dạng state-space với trạng thái `[position, velocity]ᵀ`.
+- PID fast loop có saturation và anti-windup cơ bản.
+- Finite-horizon MPC tối ưu **control sequence** thay vì một lệnh điều khiển cố định.
+- Projected-gradient optimizer với input bounds, state cost, input cost và Δu cost.
+- Warm-start cho chuỗi điều khiển giữa các lần solve.
+- Hybrid MPC → PID supervisor.
+- Event trigger dựa trên:
+  - model prediction error,
+  - normalized state change,
+  - actuator constraint proximity,
+  - watchdog timeout.
+- Disturbance injection chỉ tác động lên plant thật; MPC dùng model danh định để tạo sai lệch có ý nghĩa vật lý.
+- Trigger timeline trực quan.
+- Compute profiler: solve count, solve rate, average/max/total solver time và phần trăm solve được tránh.
+- So sánh PID / periodic MPC / event-triggered MPC+PID.
 - Metrics: overshoot, settling time, IAE, control effort, MPC solve count.
-- Điều chỉnh Kp/Ki/Kd, horizon, Q/R và trigger thresholds trực tiếp trên giao diện.
 
-> V0.1 dùng solver dự đoán dạng educational/grid-search để làm rõ logic hệ thống. Giai đoạn sau sẽ thay bằng QP/NMPC solver đúng chuẩn và benchmark thời gian tính toán.
+> Solver V0.2 là bộ tối ưu convex dạng projected-gradient viết trực tiếp cho research prototype. Nó đã tối ưu cả chuỗi điều khiển và hỗ trợ ràng buộc input, nhưng **chưa được coi là QP solver công nghiệp**. QP backend chuẩn và benchmark solver độc lập là gate kế tiếp.
 
-## Roadmap
+## Research gates
 
-### Phase 1 — Research Core
-1. PID/P/PI/PID laboratory.
-2. State-space plant models.
-3. Discrete MPC with true quadratic optimization.
-4. Event-triggered MPC.
-5. Hybrid MPC + PID supervisor.
-6. Disturbance injection and robustness tests.
-7. Experiment save/load and reproducible presets.
+Dự án chỉ tiến sang tầng tiếp theo khi tầng trước đo được và kiểm chứng được.
 
-### Phase 2 — Modern Control
-8. LQR/LQI comparison.
-9. Observer, Kalman Filter, EKF, UKF.
-10. Constraints: state/input/rate limits.
-11. Adaptive trigger threshold.
-12. Compute profiler and solver benchmark.
-13. Stability and feasibility diagnostics.
+### Gate A — Linear research core
+- State-space plant đúng và có thể thay model.
+- PID benchmark ổn định.
+- MPC control-sequence optimization.
+- Event-trigger logic có watchdog.
+- Disturbance response.
+- Compute profiling.
 
-### Phase 3 — Nonlinear / Autonomous Systems
-14. NMPC.
-15. UAV model.
-16. UGV bicycle model.
-17. USV planar model.
-18. Trajectory tracking.
-19. Wind/current/slope disturbances.
-20. Obstacle/constraint-aware control.
+### Gate B — QP MPC
+- Viết condensed prediction model.
+- Xây `H`, `f`, bounds cho quadratic program.
+- Tách solver interface khỏi controller.
+- So sánh projected-gradient với QP backend.
+- Kiểm tra feasibility, convergence và timing.
 
-### Phase 4 — Intelligent Control
-21. System Identification.
-22. Online model adaptation.
-23. Learning-based residual model.
-24. Adaptive/Learning MPC.
-25. AI experiment assistant and automatic controller comparison.
+### Gate C — State estimation
+- Observer / Kalman Filter.
+- Measurement noise.
+- Model mismatch.
+- EKF / UKF khi chuyển nonlinear.
 
-### Phase 5 — Hardware path
-26. Export controller parameters/configuration.
-27. Hardware-in-the-loop interface.
-28. STM32/ESP32/SoC timing benchmark.
-29. Telemetry stream input.
-30. Real plant validation.
+### Gate D — Autonomous plant models
+- UAV attitude/position model.
+- UGV bicycle model.
+- USV planar model.
+- Trajectory tracking + constraints + disturbances.
+
+### Gate E — NMPC and intelligence
+- Nonlinear prediction.
+- NMPC solver.
+- Online system identification.
+- Adaptive trigger threshold.
+- Learning residual dynamics / Learning MPC.
+
+### Gate F — Hardware path
+- HIL interface.
+- Telemetry ingestion.
+- Timing benchmark trên STM32/ESP32/SoC.
+- Export controller configuration.
+- Real plant validation.
 
 ## Nguyên tắc kiến trúc
 
-- PID không bị loại bỏ; PID là vòng phản xạ nhanh.
-- MPC không bắt buộc solve theo timer cố định.
-- Event Trigger quyết định khi nào cần tái dự đoán/tối ưu.
-- Luôn có watchdog timeout để tránh dùng prediction quá cũ.
-- Mỗi controller phải đo được cả chất lượng điều khiển và chi phí tính toán.
-- Simulation core tách khỏi UI để sau này có thể thay plant/solver mà không viết lại giao diện.
+1. PID không bị loại bỏ; PID giữ vòng phản xạ nhanh khi nó là lựa chọn phù hợp.
+2. MPC chỉ được dùng ở nơi prediction, multivariable coupling hoặc constraints mang lại giá trị.
+3. MPC không bắt buộc solve theo timer cố định; Event Trigger phải chứng minh được lợi ích bằng số liệu.
+4. Watchdog luôn tồn tại để tránh dùng prediction quá cũ.
+5. Mọi controller phải được đánh giá theo **control quality + compute cost**.
+6. Simulation core, plant model, solver, trigger policy và UI phải tách lớp.
+7. Không chuyển sang AI/Learning MPC trước khi baseline classical control được kiểm chứng.
+8. Không gọi một thuật toán là “real-time” nếu chưa có timing benchmark trên target hardware.
 
 ## Chạy local
 
