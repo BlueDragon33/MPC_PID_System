@@ -1,6 +1,6 @@
 import { createPIDController } from './controllers/pid.js';
 import { createSecondOrderModel, disturbanceAt, stepSecondOrderPlant } from './models/secondOrderPlant.js';
-import { solveProjectedGradientMPC } from './solvers/projectedGradientMPC.js';
+import { solveMPC, SOLVER_BACKENDS } from './solvers/index.js';
 import { evaluateEventTrigger } from './triggers/eventTrigger.js';
 
 export const defaultConfig = {
@@ -10,6 +10,7 @@ export const defaultConfig = {
   plant: { stiffness: 1.45, gain: 1.0, damping: 0.82 },
   pid: { kp: 5.2, ki: 1.35, kd: 0.52, uMin: -4, uMax: 4, antiWindup: 0.5 },
   mpc: {
+    solver: SOLVER_BACKENDS.PROJECTED_GRADIENT,
     horizon: 35,
     qPosition: 9,
     qVelocity: 1.2,
@@ -124,7 +125,7 @@ export function runSimulation(mode, userConfig = {}) {
     if (mode === 'PID') {
       u = pid.update(cfg.setpoint, state.x);
     } else if (mode === 'MPC') {
-      const solution = solveProjectedGradientMPC(state, cfg.setpoint, previousU, cfg, warmStart);
+      const solution = solveMPC(state, cfg.setpoint, previousU, cfg, warmStart);
       u = solution.u;
       warmStart = solution.sequence;
       mpcCost = solution.cost;
@@ -132,7 +133,7 @@ export function runSimulation(mode, userConfig = {}) {
       triggered = true;
       triggerReason = 'periodic';
     } else if (event.triggered) {
-      const solution = solveProjectedGradientMPC(state, cfg.setpoint, previousU, cfg, warmStart);
+      const solution = solveMPC(state, cfg.setpoint, previousU, cfg, warmStart);
       warmStart = solution.sequence;
       reference = predictiveReference(solution, cfg.setpoint, cfg);
       lastSolve = t;
