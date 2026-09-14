@@ -29,16 +29,21 @@ function scenario(qd, pd) {
 }
 
 const candidates = [];
-for (const qd of [0.001, 0.002, 0.004, 0.008]) {
-  for (const pd of [0.2, 0.8]) candidates.push({ qd, pd });
+for (const qd of [0.008, 0.016, 0.032, 0.064]) {
+  for (const pd of [0.05, 0.2]) candidates.push({ qd, pd });
 }
 
+const pulseEnd = 2.25;
 const rows = candidates.map(({ qd, pd }) => {
   const result = runSimulation('HYBRID_SAFE', scenario(qd, pd));
   const m = result.metrics;
+  const reversalWindow = result.samples.filter((sample) => sample.t >= pulseEnd && sample.t <= 2.9 && sample.disturbanceEstimateEnabled);
+  const signMismatchSamples = reversalWindow.filter((sample) => sample.equivalentDisturbance < -0.05 && sample.estimateD > 0);
+  const firstNegativeEstimate = reversalWindow.find((sample) => sample.estimateD <= 0);
+  const sample240 = result.samples.find((sample) => Math.abs(sample.t - 2.4) < 1e-9);
   return {
     Qd: qd.toExponential(1),
-    Pd0: pd.toFixed(1),
+    Pd0: pd.toFixed(2),
     IAE: m.iae.toFixed(4),
     solves: m.solveCount,
     'conv %': m.convergenceRate == null ? 'n/a' : m.convergenceRate.toFixed(1),
@@ -49,9 +54,13 @@ const rows = candidates.map(({ qd, pd }) => {
     vRMSE: m.estimateVelocityRmse?.toFixed(4) ?? '—',
     dRMSE: m.disturbanceEstimateRmse?.toFixed(4) ?? '—',
     activeDRMSE: m.activeDisturbanceEstimateRmse?.toFixed(4) ?? '—',
+    'd̂@2.40': sample240?.estimateD?.toFixed(3) ?? '—',
+    'deq@2.40': sample240?.equivalentDisturbance?.toFixed(3) ?? '—',
+    signMismatch: signMismatchSamples.length,
+    signRecovery: firstNegativeEstimate ? (firstNegativeEstimate.t - pulseEnd).toFixed(3) : '>0.65',
     'max Δv': m.maxUncertaintyVelocityMargin.toFixed(4),
   };
 });
 
-console.log('Disturbance-observer covariance sensitivity under model mismatch');
+console.log('Disturbance-observer sign-reversal sensitivity under model mismatch');
 console.table(rows);
