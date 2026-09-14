@@ -145,18 +145,20 @@ export function buildCondensedQP({ A, B, C = [1, 0], state, target, previousU, c
     previousU,
   });
 
+  const stateEnabled = Boolean(cfg.mpc.stateConstraintsEnabled);
+  const outputEnabled = Boolean(cfg.mpc.outputConstraintsEnabled);
   appendPredictionInequalities(inequalities, {
     Gamma,
     freePrediction,
     horizon: N,
     stateDimension: 2,
     outputC: C,
-    positionMin: cfg.mpc.positionMin,
-    positionMax: cfg.mpc.positionMax,
-    velocityMin: cfg.mpc.velocityMin,
-    velocityMax: cfg.mpc.velocityMax,
-    outputMin: cfg.mpc.outputMin,
-    outputMax: cfg.mpc.outputMax,
+    positionMin: stateEnabled ? cfg.mpc.positionMin : null,
+    positionMax: stateEnabled ? cfg.mpc.positionMax : null,
+    velocityMin: stateEnabled ? cfg.mpc.velocityMin : null,
+    velocityMax: stateEnabled ? cfg.mpc.velocityMax : null,
+    outputMin: outputEnabled ? cfg.mpc.outputMin : null,
+    outputMax: outputEnabled ? cfg.mpc.outputMax : null,
   });
   finalizeInequalities(inequalities);
 
