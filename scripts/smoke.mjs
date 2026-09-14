@@ -1,6 +1,7 @@
 import { compareControllers, defaultConfig, getStateSpaceModel } from '../src/core/simulator.js';
 import { buildCondensedQP, evaluateCondensedQP, qpDiagnostics } from '../src/core/mpc/condensedQP.js';
 import { evaluateMPCSequenceCost } from '../src/core/solvers/projectedGradientMPC.js';
+import { solveBoxQPMPC } from '../src/core/solvers/boxQPMPC.js';
 
 const results = compareControllers(defaultConfig);
 const byMode = Object.fromEntries(results.map((r) => [r.mode, r]));
@@ -20,6 +21,8 @@ assert(byMode.MPC.metrics.solveCount === byMode.MPC.samples.length, 'Periodic MP
 assert(byMode.HYBRID.metrics.solveCount > 0, 'Hybrid controller must invoke MPC');
 assert(byMode.HYBRID.metrics.solveCount < byMode.MPC.metrics.solveCount, 'Event-triggered hybrid must solve less often than periodic MPC');
 assert(byMode.HYBRID.metrics.computeReduction > 50, 'Default hybrid configuration should avoid at least 50% of periodic MPC solves');
+assert(Number.isFinite(byMode.HYBRID.metrics.avgIterations), 'Hybrid solver iteration metric must be finite');
+assert(byMode.HYBRID.metrics.maxFeasibilityViolation <= 1e-9, 'Hybrid QP must remain feasible under input bounds');
 
 const disturbanceSamples = byMode.HYBRID.samples.filter((p) => Math.abs(p.disturbance) > 1e-9);
 assert(disturbanceSamples.length > 0, 'Default experiment must contain disturbance injection');
@@ -53,8 +56,27 @@ const condensed1 = evaluateCondensedQP(qp, U1);
 const objectiveDeltaError = Math.abs((direct1 - direct0) - (condensed1 - condensed0));
 assert(objectiveDeltaError < 1e-8, `Condensed QP objective does not match rollout cost: ${objectiveDeltaError}`);
 
+const solverTestConfig = {
+  ...defaultConfig,
+  mpc: {
+    ...defaultConfig.mpc,
+    horizon: 14,
+    qpIterations: 300,
+    qpTolerance: 1e-6,
+  },
+};
+const solverWarmStart = new Array(solverTestConfig.mpc.horizon).fill(qpPreviousU);
+const solverSolution = solveBoxQPMPC(qpState, solverTestConfig.setpoint, qpPreviousU, solverTestConfig, solverWarmStart);
+assert(solverSolution.solver === 'box-qp', 'Expected the box QP backend');
+assert(solverSolution.diagnostics.finite, 'Box QP diagnostics must be finite');
+assert(solverSolution.diagnostics.feasibilityViolation <= 1e-10, 'Box QP solution violates input bounds');
+assert(solverSolution.sequence.every((u) => u >= solverTestConfig.mpc.uMin - 1e-10 && u <= solverTestConfig.mpc.uMax + 1e-10), 'Box QP control sequence violates bounds');
+assert(solverSolution.diagnostics.kktResidual < 5e-4, `Box QP KKT residual too large: ${solverSolution.diagnostics.kktResidual}`);
+
 console.log('MPC_PID_System smoke test PASS');
 for (const result of results) {
-  console.log(`${result.mode}: IAE=${result.metrics.iae.toFixed(4)}, solves=${result.metrics.solveCount}, reduction=${result.metrics.computeReduction.toFixed(1)}%`);
+  const convergence = result.metrics.convergenceRate == null ? 'n/a' : `${result.metrics.convergenceRate.toFixed(1)}%`;
+  console.log(`${result.mode}: IAE=${result.metrics.iae.toFixed(4)}, solves=${result.metrics.solveCount}, reduction=${result.metrics.computeReduction.toFixed(1)}%, convergence=${convergence}`);
 }
 console.log(`QP: n=${qpInfo.dimension}, symmetryError=${qpInfo.maxSymmetryError.toExponential(2)}, minDiagonal=${qpInfo.minDiagonal.toFixed(6)}, objectiveDeltaError=${objectiveDeltaError.toExponential(2)}`);
+console.log(`BoxQP: KKT=${solverSolution.diagnostics.kktResidual.toExponential(2)}, iterations=${solverSolution.diagnostics.iterations}, active=${solverSolution.diagnostics.activeConstraints}/${solverSolution.sequence.length}`);
