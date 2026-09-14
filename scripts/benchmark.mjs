@@ -19,22 +19,35 @@ const cases = [
 const rows = [];
 for (const item of cases) {
   const presetConfig = applyExperimentPreset(defaultConfig, item.preset);
+  const generalEnvelope = item.backend === SOLVER_BACKENDS.CONSTRAINED_QP
+    && (presetConfig.mpc.stateConstraintsEnabled || presetConfig.mpc.outputConstraintsEnabled);
+  const stress = item.preset === 'disturbance-stress';
+
   const config = {
     ...presetConfig,
-    duration: Math.min(2.0, presetConfig.duration),
+    duration: generalEnvelope ? 1.6 : Math.min(2.0, presetConfig.duration),
+    disturbance: stress
+      ? {
+          ...presetConfig.disturbance,
+          enabled: true,
+          start: 0.55,
+          duration: 0.65,
+        }
+      : { ...presetConfig.disturbance },
     safety: {
       ...defaultConfig.safety,
       ...(presetConfig.safety || {}),
-      previewHorizon: 8,
     },
     mpc: {
       ...presetConfig.mpc,
       solver: item.backend,
-      horizon: Math.min(16, presetConfig.mpc.horizon),
-      qpIterations: Math.min(40, presetConfig.mpc.qpIterations),
-      qpProjectionCycles: Math.min(10, presetConfig.mpc.qpProjectionCycles),
+      horizon: generalEnvelope ? Math.min(12, presetConfig.mpc.horizon) : Math.min(16, presetConfig.mpc.horizon),
+      qpIterations: generalEnvelope ? Math.max(100, presetConfig.mpc.qpIterations) : Math.min(40, presetConfig.mpc.qpIterations),
+      qpProjectionCycles: generalEnvelope ? Math.max(16, presetConfig.mpc.qpProjectionCycles) : Math.min(10, presetConfig.mpc.qpProjectionCycles),
+      qpTolerance: generalEnvelope ? Math.min(5e-5, presetConfig.mpc.qpTolerance) : presetConfig.mpc.qpTolerance,
     },
   };
+
   const result = runSimulation(item.mode, config);
   rows.push({
     ...item,
