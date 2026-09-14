@@ -7,8 +7,9 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "smoke": "node scripts/smoke.mjs && node scripts/experimentRoundtrip.mjs && node scripts/estimationSmoke.mjs && node scripts/closedLoopEstimationSmoke.mjs && node scripts/uncertaintyTighteningSmoke.mjs && node scripts/estimatedSafetySmoke.mjs && node scripts/disturbanceEstimationSmoke.mjs && node scripts/disturbanceObserverSensitivity.mjs && node scripts/modelMismatchObserverSmoke.mjs",
-    "benchmark": "node scripts/benchmark.mjs"
+    "smoke": "node scripts/smoke.mjs && node scripts/experimentRoundtrip.mjs && node scripts/estimationSmoke.mjs && node scripts/closedLoopEstimationSmoke.mjs && node scripts/uncertaintyTighteningSmoke.mjs && node scripts/estimatedSafetySmoke.mjs && node scripts/disturbanceEstimationSmoke.mjs && node scripts/modelMismatchObserverSmoke.mjs",
+    "benchmark": "node scripts/benchmark.mjs",
+    "sensitivity:disturbance": "node scripts/disturbanceObserverSensitivity.mjs"
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",
