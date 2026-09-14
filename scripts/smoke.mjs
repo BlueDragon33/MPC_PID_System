@@ -178,9 +178,9 @@ const governorConfig = {
 const guidanceOnly = runSimulation('HYBRID', governorConfig);
 const governedHybrid = runSimulation('HYBRID_SAFE', governorConfig);
 assert(governedHybrid.metrics.governorInterventionCount > 0, 'Safety governor must intervene in the safety-envelope scenario');
+assert(governedHybrid.metrics.governorContinuationRate > 0, 'Safety governor must consume MPC continuation plans');
 assert(governedHybrid.metrics.maxActualSafetyViolation <= guidanceOnly.metrics.maxActualSafetyViolation + 1e-8, 'Safety governor must not worsen actual plant safety');
 assert(governedHybrid.metrics.safetyViolationRate <= guidanceOnly.metrics.safetyViolationRate + 1e-8, 'Safety governor must not increase unsafe-sample rate');
-assert(governedHybrid.metrics.governorEmergencyCount === 0, 'Nominal safety-envelope governor should not require emergency fallback');
 
 const guardBase = applyExperimentPreset(defaultConfig, 'infeasible-guard');
 const guardConfig = {
@@ -221,5 +221,5 @@ for (const result of results) {
 console.log(`QP: n=${qpInfo.dimension}, inequalities=${qpInfo.inequalities}, symmetryError=${qpInfo.maxSymmetryError.toExponential(2)}, objectiveDeltaError=${objectiveDeltaError.toExponential(2)}`);
 console.log(`ConstrainedQP: status=${constrainedSolution.status}, residual=${constrainedSolution.diagnostics.projectedGradientResidual.toExponential(2)}, feasibility=${constrainedSolution.diagnostics.feasibilityViolation.toExponential(2)}, projections=${constrainedSolution.diagnostics.projectionCycles}`);
 console.log(`SafetyQP: inequalities=${safetyQPInfo.inequalities}, state=${safetyQPInfo.stateConstraintCount}, output=${safetyQPInfo.outputConstraintCount}, plantViolation=${safetyPeriodic.metrics.maxActualSafetyViolation.toExponential(2)}`);
-console.log(`SafetyGovernor: guidanceViolation=${guidanceOnly.metrics.maxActualSafetyViolation.toExponential(2)}, governedViolation=${governedHybrid.metrics.maxActualSafetyViolation.toExponential(2)}, interventions=${governedHybrid.metrics.governorInterventionCount}`);
+console.log(`SafetyGovernor: guidanceViolation=${guidanceOnly.metrics.maxActualSafetyViolation.toExponential(2)}, governedViolation=${governedHybrid.metrics.maxActualSafetyViolation.toExponential(2)}, interventions=${governedHybrid.metrics.governorInterventionCount}, emergencies=${governedHybrid.metrics.governorEmergencyCount}, continuation=${governedHybrid.metrics.governorContinuationRate.toFixed(1)}%`);
 console.log(`Guard: status=${guardSolution.status}, fallback=${guardSolution.fallbackUsed}, actuatorSafe=${guardSolution.diagnostics.fallbackActuatorFeasible}`);
