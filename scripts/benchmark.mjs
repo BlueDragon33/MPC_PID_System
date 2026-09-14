@@ -146,6 +146,8 @@ console.table([
     'measurement RMSE': '—',
     'x-hat RMSE': '—',
     'v-hat RMSE': '—',
+    'max Δx': '—',
+    'max Δv': '—',
   },
   {
     controllerState: 'kalman',
@@ -159,8 +161,43 @@ console.table([
     'measurement RMSE': estimatedStateResult.metrics.measurementRmse?.toFixed(4) ?? 'n/a',
     'x-hat RMSE': estimatedStateResult.metrics.estimatePositionRmse?.toFixed(4) ?? 'n/a',
     'v-hat RMSE': estimatedStateResult.metrics.estimateVelocityRmse?.toFixed(4) ?? 'n/a',
+    'max Δx': estimatedStateResult.metrics.maxUncertaintyPositionMargin.toFixed(4),
+    'max Δv': estimatedStateResult.metrics.maxUncertaintyVelocityMargin.toFixed(4),
   },
 ]);
 
 console.log(`Estimated/truth IAE ratio: ${(estimatedStateResult.metrics.iae / truthStateResult.metrics.iae).toFixed(3)}`);
 console.log(`Estimate/measurement position RMSE ratio: ${estimatedStateResult.metrics.estimateToMeasurementRmseRatio?.toFixed(3) ?? 'n/a'}`);
+
+const sigmaSweep = [0, 1, 1.5, 2, 2.5, 3].map((constraintSigma) => {
+  const result = runSimulation('HYBRID_SAFE', {
+    ...sharedEstimationBenchmark,
+    duration: 1.8,
+    estimation: {
+      ...sharedEstimationBenchmark.estimation,
+      enabled: true,
+      constraintTighteningEnabled: constraintSigma > 0,
+      constraintSigma,
+    },
+  });
+  return {
+    constraintSigma,
+    result,
+  };
+});
+
+console.log('\nCovariance tightening sensitivity');
+console.table(sigmaSweep.map(({ constraintSigma, result }) => ({
+  'kσ': constraintSigma.toFixed(1),
+  IAE: result.metrics.iae.toFixed(4),
+  solves: result.metrics.solveCount,
+  'conv %': result.metrics.convergenceRate == null ? 'n/a' : result.metrics.convergenceRate.toFixed(1),
+  fallback: result.metrics.fallbackCount,
+  'plant safety': result.metrics.maxActualSafetyViolation.toExponential(2),
+  'unsafe %': result.metrics.safetyViolationRate.toFixed(1),
+  'x-hat RMSE': result.metrics.estimatePositionRmse?.toFixed(4) ?? 'n/a',
+  'v-hat RMSE': result.metrics.estimateVelocityRmse?.toFixed(4) ?? 'n/a',
+  'max Δx': result.metrics.maxUncertaintyPositionMargin.toFixed(4),
+  'max Δv': result.metrics.maxUncertaintyVelocityMargin.toFixed(4),
+  'invalid envelope': result.metrics.uncertaintyInvalidEnvelopeCount,
+})));
