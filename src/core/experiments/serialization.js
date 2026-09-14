@@ -11,6 +11,7 @@ function mergeConfig(config = {}) {
     pid: { ...defaultConfig.pid, ...(config.pid || {}) },
     mpc: { ...defaultConfig.mpc, ...(config.mpc || {}) },
     safety: { ...defaultConfig.safety, ...(config.safety || {}) },
+    estimation: { ...defaultConfig.estimation, ...(config.estimation || {}) },
     trigger: { ...defaultConfig.trigger, ...(config.trigger || {}) },
     disturbance: { ...defaultConfig.disturbance, ...(config.disturbance || {}) },
   };
