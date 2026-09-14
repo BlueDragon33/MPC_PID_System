@@ -5,6 +5,7 @@ export const EXPERIMENT_PRESETS = [
     description: 'Default event-triggered MPC + PID with actuator and slew-rate constraints.',
     patch: {
       estimation: { enabled: false },
+      truthPlant: { enabled: false },
       mpc: {
         stateConstraintsEnabled: false,
         outputConstraintsEnabled: false,
@@ -20,6 +21,7 @@ export const EXPERIMENT_PRESETS = [
     description: 'Highlights the difference between penalizing Δu and enforcing it as a hard physical limit.',
     patch: {
       estimation: { enabled: false },
+      truthPlant: { enabled: false },
       mpc: {
         stateConstraintsEnabled: false,
         outputConstraintsEnabled: false,
@@ -36,6 +38,7 @@ export const EXPERIMENT_PRESETS = [
     description: 'Constrains future velocity and measured output so MPC must anticipate the safe region before PID reacts.',
     patch: {
       estimation: { enabled: false },
+      truthPlant: { enabled: false },
       safety: {
         previewHorizon: 8,
         positionMargin: 0,
@@ -64,6 +67,7 @@ export const EXPERIMENT_PRESETS = [
     description: 'Large plant-only disturbance used to study trigger density, recovery and constraint activation.',
     patch: {
       estimation: { enabled: false },
+      truthPlant: { enabled: false },
       safety: {
         previewHorizon: 10,
         positionMargin: 0,
@@ -96,6 +100,7 @@ export const EXPERIMENT_PRESETS = [
     label: 'Kalman noisy sensor',
     description: 'Closed-loop hybrid uses only the Kalman estimate and tightens state/output constraints from estimator covariance.',
     patch: {
+      truthPlant: { enabled: false },
       estimation: {
         enabled: true,
         measurementNoiseStd: 0.1,
@@ -107,6 +112,7 @@ export const EXPERIMENT_PRESETS = [
         initialVelocityVariance: 0.06,
         constraintTighteningEnabled: true,
         constraintSigma: 1.5,
+        disturbanceStateEnabled: false,
       },
       safety: {
         previewHorizon: 8,
@@ -136,12 +142,97 @@ export const EXPERIMENT_PRESETS = [
     },
   },
   {
+    id: 'model-mismatch',
+    label: 'Model mismatch · 2-state KF',
+    description: 'Truth plant differs from the controller model; standard Kalman estimates x/v but has no explicit disturbance state.',
+    patch: {
+      truthPlant: {
+        enabled: true,
+        stiffnessScale: 1.18,
+        dampingScale: 0.78,
+        gainScale: 0.90,
+      },
+      estimation: {
+        enabled: true,
+        measurementNoiseStd: 0.08,
+        seed: 20260914,
+        processPositionVariance: 2e-5,
+        processVelocityVariance: 4e-4,
+        initialPositionVariance: 0.04,
+        initialVelocityVariance: 0.08,
+        constraintTighteningEnabled: true,
+        constraintSigma: 1.5,
+        disturbanceStateEnabled: false,
+      },
+      safety: { previewHorizon: 8, positionMargin: 0.01, velocityMargin: 0.02, outputMargin: 0.01 },
+      mpc: {
+        stateConstraintsEnabled: true,
+        positionMin: -1.6,
+        positionMax: 1.6,
+        velocityMin: -1.0,
+        velocityMax: 1.0,
+        outputConstraintsEnabled: true,
+        outputMin: -0.3,
+        outputMax: 1.08,
+        deltaUMin: -0.45,
+        deltaUMax: 0.45,
+        qpProjectionCycles: 16,
+      },
+      trigger: { predictionError: 0.04, stateChange: 0.08, maxInterval: 0.3 },
+      disturbance: { enabled: true, start: 2.4, duration: 1.2, amplitude: 1.0 },
+    },
+  },
+  {
+    id: 'mismatch-observer',
+    label: 'Model mismatch · d̂ observer',
+    description: 'Same truth/model mismatch, but an augmented Kalman state estimates the equivalent disturbance d̂ without yet feeding it into MPC prediction.',
+    patch: {
+      truthPlant: {
+        enabled: true,
+        stiffnessScale: 1.18,
+        dampingScale: 0.78,
+        gainScale: 0.90,
+      },
+      estimation: {
+        enabled: true,
+        measurementNoiseStd: 0.08,
+        seed: 20260914,
+        processPositionVariance: 2e-5,
+        processVelocityVariance: 2e-4,
+        initialPositionVariance: 0.04,
+        initialVelocityVariance: 0.08,
+        constraintTighteningEnabled: true,
+        constraintSigma: 1.5,
+        disturbanceStateEnabled: true,
+        disturbanceProcessVariance: 8e-3,
+        initialDisturbanceVariance: 0.8,
+      },
+      safety: { previewHorizon: 8, positionMargin: 0.01, velocityMargin: 0.02, outputMargin: 0.01 },
+      mpc: {
+        stateConstraintsEnabled: true,
+        positionMin: -1.6,
+        positionMax: 1.6,
+        velocityMin: -1.0,
+        velocityMax: 1.0,
+        outputConstraintsEnabled: true,
+        outputMin: -0.3,
+        outputMax: 1.08,
+        deltaUMin: -0.45,
+        deltaUMax: 0.45,
+        qpProjectionCycles: 16,
+      },
+      trigger: { predictionError: 0.04, stateChange: 0.08, maxInterval: 0.3 },
+      disturbance: { enabled: true, start: 2.4, duration: 1.2, amplitude: 1.0 },
+    },
+  },
+  {
     id: 'infeasible-guard',
     label: 'Infeasible-envelope guard',
     description: 'Deliberately impossible first-step velocity envelope; validates explicit infeasibility and safe actuator fallback.',
     patch: {
       duration: 2.0,
       estimation: { enabled: false },
+      truthPlant: { enabled: false },
       safety: { previewHorizon: 6 },
       mpc: {
         stateConstraintsEnabled: true,
@@ -170,6 +261,7 @@ export function applyExperimentPreset(baseConfig, id) {
     ...baseConfig,
     ...patch,
     plant: { ...baseConfig.plant, ...(patch.plant || {}) },
+    truthPlant: { ...baseConfig.truthPlant, ...(patch.truthPlant || {}) },
     pid: { ...baseConfig.pid, ...(patch.pid || {}) },
     mpc: { ...baseConfig.mpc, ...(patch.mpc || {}) },
     safety: { ...baseConfig.safety, ...(patch.safety || {}) },
