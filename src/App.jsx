@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Activity, BrainCircuit, Cpu, Gauge, Play, Radar, ShieldCheck, SlidersHorizontal, TimerReset, Waves } from 'lucide-react';
+import EstimationPanel from './components/EstimationPanel.jsx';
 import ExperimentSafetyPanel from './components/ExperimentSafetyPanel.jsx';
 import { compareControllers, defaultConfig, getStateSpaceModel } from './core/simulator.js';
 import { SOLVER_BACKENDS } from './core/solvers/index.js';
@@ -131,20 +132,20 @@ export default function App() {
           <a><Cpu size={18}/>Solver Diagnostics</a>
           <a><TimerReset size={18}/>Experiments</a>
         </nav>
-        <div className="sidebar-note"><b>V0.3D Safety Authority</b><span>event MPC · predictive guidance · fast PID · short-horizon admissibility governor</span></div>
+        <div className="sidebar-note"><b>Estimated-state hybrid control</b><span>Kalman estimate · event MPC · fast PID · covariance-aware safety</span></div>
       </aside>
 
       <main>
         <header>
-          <div><p className="eyebrow">ADVANCED CONTROL WORKBENCH</p><h1>Predict globally. React fast. Guard every command.</h1><p className="subtitle">MPC vẫn chỉ solve khi Event Trigger yêu cầu. PID chạy vòng nhanh. Safety Governor chạy rất nhẹ ở mỗi sample, tính miền lệnh admissible trong short horizon và không cho PID phát lệnh làm mất predicted safe envelope.</p></div>
-          <button className="run"><Play size={17} fill="currentColor"/>Safety authority experiment</button>
+          <div><p className="eyebrow">ADVANCED CONTROL WORKBENCH</p><h1>Predict globally. React fast. Guard every command.</h1><p className="subtitle">MPC chỉ solve khi Event Trigger yêu cầu. PID chạy vòng nhanh. Khi estimation bật, toàn bộ controller dùng x̂; covariance có thể co safety envelope để bù uncertainty trước khi lệnh tới actuator.</p></div>
+          <button className="run"><Play size={17} fill="currentColor"/>Run research experiment</button>
         </header>
 
         <section className="kpi-grid">
           <div className="kpi"><span>Solver backend</span><strong>{solverLabel}</strong><small>{usingConstrainedQP ? 'general polyhedral QP' : 'research baseline'}</small></div>
           <div className="kpi"><span>MPC compute avoided</span><strong>{governed.metrics.computeReduction.toFixed(1)}%</strong><small>HYBRID_SAFE vs periodic solve every sample</small></div>
-          <div className="kpi"><span>Governor intervention</span><strong>{governed.metrics.governorInterventionRate.toFixed(1)}%</strong><small>{governed.metrics.governorInterventionCount} fast-loop corrections</small></div>
-          <div className={`kpi ${governed.metrics.maxActualSafetyViolation <= hybrid.metrics.maxActualSafetyViolation ? '' : 'kpi-warning'}`}><span>Safety gap: governed / guidance</span><strong>{safetyEnabled ? `${fmtScientific(governed.metrics.maxActualSafetyViolation)} / ${fmtScientific(hybrid.metrics.maxActualSafetyViolation)}` : 'OFF'}</strong><small>{safetyEnabled ? 'lower governed value is better' : 'load Safety Envelope preset to compare authority'}</small></div>
+          <div className="kpi"><span>Governor intervention</span><strong>{governed.metrics.governorInterventionRate.toFixed(1)}%</strong><small>{governed.metrics.governorInterventionCount} safety corrections</small></div>
+          <div className={`kpi ${governed.metrics.maxActualSafetyViolation <= hybrid.metrics.maxActualSafetyViolation ? '' : 'kpi-warning'}`}><span>Safety gap: governed / guidance</span><strong>{safetyEnabled ? `${fmtScientific(governed.metrics.maxActualSafetyViolation)} / ${fmtScientific(hybrid.metrics.maxActualSafetyViolation)}` : 'OFF'}</strong><small>{safetyEnabled ? 'actual plant audit' : 'load a safety-envelope preset'}</small></div>
         </section>
 
         <section className="workspace">
@@ -189,7 +190,8 @@ export default function App() {
             <div className="control-group"><h3>Predictive cost</h3><NumberField label="Horizon" value={cfg.mpc.horizon} step={1} onChange={(v) => update('mpc', 'horizon', Math.max(3, Math.round(v)))}/><NumberField label="Q position" value={cfg.mpc.qPosition} onChange={(v) => update('mpc', 'qPosition', Math.max(0, v))}/><NumberField label="Q velocity" value={cfg.mpc.qVelocity} onChange={(v) => update('mpc', 'qVelocity', Math.max(0, v))}/><NumberField label="R input" value={cfg.mpc.rInput} onChange={(v) => update('mpc', 'rInput', Math.max(0, v))}/><NumberField label="R Δu" value={cfg.mpc.rDelta} onChange={(v) => update('mpc', 'rDelta', Math.max(0, v))}/><NumberField label="Terminal weight" value={cfg.mpc.terminalWeight} step={0.5} onChange={(v) => update('mpc', 'terminalWeight', Math.max(1, v))}/></div>
             <div className="control-group constraint-controls"><h3>Hard actuator constraints</h3><NumberField label="u min" value={cfg.mpc.uMin} step={0.1} onChange={(v) => update('mpc', 'uMin', Math.min(v, cfg.mpc.uMax))}/><NumberField label="u max" value={cfg.mpc.uMax} step={0.1} onChange={(v) => update('mpc', 'uMax', Math.max(v, cfg.mpc.uMin))}/><NumberField label="Δu min / sample" value={cfg.mpc.deltaUMin} step={0.05} onChange={(v) => update('mpc', 'deltaUMin', Math.min(v, cfg.mpc.deltaUMax))}/><NumberField label="Δu max / sample" value={cfg.mpc.deltaUMax} step={0.05} onChange={(v) => update('mpc', 'deltaUMax', Math.max(v, cfg.mpc.deltaUMin))}/></div>
             <ExperimentSafetyPanel cfg={cfg} setCfg={setCfg} presetId={presetId} setPresetId={setPresetId}/>
-            <div className="control-group governor-controls"><h3>Fast Safety Governor</h3><NumberField label="Preview horizon" value={cfg.safety.previewHorizon} step={1} onChange={(v) => update('safety', 'previewHorizon', Math.max(1, Math.round(v)))}/><NumberField label="Position margin" value={cfg.safety.positionMargin} step={0.01} onChange={(v) => update('safety', 'positionMargin', Math.max(0, v))}/><NumberField label="Velocity margin" value={cfg.safety.velocityMargin} step={0.01} onChange={(v) => update('safety', 'velocityMargin', Math.max(0, v))}/><NumberField label="Output margin" value={cfg.safety.outputMargin} step={0.01} onChange={(v) => update('safety', 'outputMargin', Math.max(0, v))}/><p className="constraint-note">Governor giả định một command ứng viên không đổi trên preview horizon để tạo interval admissible. Đây là guard bảo thủ, O(H), không phải MPC thứ hai.</p></div>
+            <EstimationPanel cfg={cfg} setCfg={setCfg}/>
+            <div className="control-group governor-controls"><h3>Fast Safety Governor</h3><NumberField label="Preview horizon" value={cfg.safety.previewHorizon} step={1} onChange={(v) => update('safety', 'previewHorizon', Math.max(1, Math.round(v)))}/><NumberField label="Position margin" value={cfg.safety.positionMargin} step={0.01} onChange={(v) => update('safety', 'positionMargin', Math.max(0, v))}/><NumberField label="Velocity margin" value={cfg.safety.velocityMargin} step={0.01} onChange={(v) => update('safety', 'velocityMargin', Math.max(0, v))}/><NumberField label="Output margin" value={cfg.safety.outputMargin} step={0.01} onChange={(v) => update('safety', 'outputMargin', Math.max(0, v))}/><p className="constraint-note">Governor kiểm tra PID first move rồi dùng phần MPC plan còn lại làm continuation trên preview horizon. Nó là admissibility guard O(H), không phải MPC thứ hai.</p></div>
             <div className="control-group guidance-controls"><h3>MPC → PID guidance</h3><NumberField label="Reference lead" value={cfg.mpc.referenceLead} step={0.05} onChange={(v) => update('mpc', 'referenceLead', Math.max(0, v))}/><NumberField label="Velocity damping" value={cfg.mpc.velocityDamping} step={0.01} onChange={(v) => update('mpc', 'velocityDamping', Math.max(0, v))}/><NumberField label="Lead clamp" value={cfg.mpc.maxReferenceLead} step={0.05} onChange={(v) => update('mpc', 'maxReferenceLead', Math.max(0, v))}/></div>
             <div className="control-group accent"><h3>Event trigger</h3><NumberField label="Prediction error" value={cfg.trigger.predictionError} step={0.005} onChange={(v) => update('trigger', 'predictionError', Math.max(0.001, v))}/><NumberField label="State change" value={cfg.trigger.stateChange} step={0.01} onChange={(v) => update('trigger', 'stateChange', Math.max(0.001, v))}/><NumberField label="Min interval (s)" value={cfg.trigger.minInterval} step={0.02} onChange={(v) => update('trigger', 'minInterval', Math.max(cfg.dt, v))}/><NumberField label="Watchdog (s)" value={cfg.trigger.maxInterval} step={0.02} onChange={(v) => update('trigger', 'maxInterval', Math.max(cfg.trigger.minInterval, v))}/></div>
             <div className="control-group disturbance-controls"><h3>Disturbance injection</h3><ToggleField label="Enabled" checked={cfg.disturbance.enabled} onChange={(v) => update('disturbance', 'enabled', v)}/><NumberField label="Start (s)" value={cfg.disturbance.start} step={0.1} onChange={(v) => update('disturbance', 'start', Math.max(0, v))}/><NumberField label="Duration (s)" value={cfg.disturbance.duration} step={0.1} onChange={(v) => update('disturbance', 'duration', Math.max(cfg.dt, v))}/><NumberField label="Amplitude" value={cfg.disturbance.amplitude} step={0.1} onChange={(v) => update('disturbance', 'amplitude', v)}/></div>
@@ -197,17 +199,20 @@ export default function App() {
         </section>
 
         <section className="panel diagnostics-panel">
-          <div className="panel-head"><div><span className="section-tag">SOLVER + SAFETY AUTHORITY</span><h2>{MODE_LABELS[activeMode]} audit</h2></div><span className="solver-badge">{cfg.mpc.solver}</span></div>
+          <div className="panel-head"><div><span className="section-tag">SOLVER + SAFETY + ESTIMATION</span><h2>{MODE_LABELS[activeMode]} audit</h2></div><span className="solver-badge">{cfg.mpc.solver}</span></div>
           <div className="diagnostics-grid diagnostics-grid-wide">
             <div className={`diag-card ${(active.metrics.convergenceRate ?? 100) >= 95 ? 'diag-good' : 'diag-warn'}`}><span>Convergence</span><strong>{active.metrics.convergenceRate == null ? 'N/A' : `${active.metrics.convergenceRate.toFixed(1)}%`}</strong><small>MPC optimization calls</small></div>
             <div className={`diag-card ${(active.metrics.maxFeasibilityViolation ?? 0) <= 1e-6 ? 'diag-good' : 'diag-warn'}`}><span>QP feasibility</span><strong>{fmtScientific(active.metrics.maxFeasibilityViolation)}</strong><small>predicted AU ≤ b violation</small></div>
-            <div className={`diag-card ${active.metrics.maxActualSafetyViolation <= 1e-9 ? 'diag-good' : 'diag-warn'}`}><span>Real plant safety</span><strong>{safetyEnabled ? fmtScientific(active.metrics.maxActualSafetyViolation) : 'OFF'}</strong><small>{safetyEnabled ? `${active.metrics.safetyViolationRate.toFixed(1)}% unsafe samples` : 'load Safety Envelope preset'}</small></div>
-            <div className="diag-card"><span>Governor intervention</span><strong>{active.metrics.governorEnabled ? `${active.metrics.governorInterventionRate.toFixed(1)}%` : 'OFF'}</strong><small>{active.metrics.governorInterventionCount} corrected samples</small></div>
+            <div className={`diag-card ${active.metrics.maxActualSafetyViolation <= 1e-9 ? 'diag-good' : 'diag-warn'}`}><span>Real plant safety</span><strong>{safetyEnabled ? fmtScientific(active.metrics.maxActualSafetyViolation) : 'OFF'}</strong><small>{safetyEnabled ? `${active.metrics.safetyViolationRate.toFixed(1)}% unsafe samples` : 'load a safety-envelope preset'}</small></div>
+            <div className="diag-card"><span>Governor intervention</span><strong>{active.metrics.governorEnabled ? `${active.metrics.governorInterventionRate.toFixed(1)}%` : 'OFF'}</strong><small>{active.metrics.governorInterventionCount} safety corrections</small></div>
             <div className={`diag-card ${active.metrics.governorEmergencyCount === 0 ? 'diag-good' : 'diag-warn'}`}><span>Governor emergency</span><strong>{active.metrics.governorEnabled ? active.metrics.governorEmergencyCount : '—'}</strong><small>{active.metrics.governorInfeasibleCount} empty admissible intervals</small></div>
-            <div className="diag-card"><span>Max governor correction</span><strong>{active.metrics.governorEnabled ? active.metrics.governorMaxCorrection.toFixed(3) : '—'}</strong><small>|u_safe − u_PID|</small></div>
             <div className={`diag-card ${active.metrics.fallbackCount === 0 ? 'diag-good' : 'diag-warn'}`}><span>MPC fallback</span><strong>{active.metrics.fallbackCount}</strong><small>{active.metrics.timeoutCount} timeout · {active.metrics.infeasibleCount} infeasible</small></div>
+            <div className="diag-card"><span>Measurement RMSE</span><strong>{active.metrics.estimationEnabled ? active.metrics.measurementRmse?.toFixed(4) ?? '—' : 'OFF'}</strong><small>sensor error against plant truth</small></div>
+            <div className={`diag-card ${active.metrics.estimationEnabled && (active.metrics.estimateToMeasurementRmseRatio ?? 1) < 1 ? 'diag-good' : ''}`}><span>x̂ RMSE</span><strong>{active.metrics.estimationEnabled ? active.metrics.estimatePositionRmse?.toFixed(4) ?? '—' : 'OFF'}</strong><small>{active.metrics.estimationEnabled ? `ratio ${(active.metrics.estimateToMeasurementRmseRatio ?? 0).toFixed(3)} vs measurement` : 'enable Kalman estimated-state control'}</small></div>
+            <div className="diag-card"><span>v̂ RMSE</span><strong>{active.metrics.estimationEnabled ? active.metrics.estimateVelocityRmse?.toFixed(4) ?? '—' : 'OFF'}</strong><small>velocity is inferred, not directly measured</small></div>
+            <div className={`diag-card ${active.metrics.uncertaintyInvalidEnvelopeCount === 0 ? 'diag-good' : 'diag-warn'}`}><span>Covariance safety</span><strong>{active.metrics.uncertaintyTighteningEnabled ? `${cfg.estimation.constraintSigma.toFixed(1)}σ` : 'OFF'}</strong><small>{active.metrics.uncertaintyInvalidEnvelopeCount} invalid tightened envelopes</small></div>
           </div>
-          <p className="solver-note">Safety Governor không thay MPC và cũng không thay PID. MPC giải bài toán horizon dài theo event; PID phản ứng nhanh; Governor chỉ kiểm tra command PID trong short horizon mỗi sample. Nếu admissible interval rỗng, hệ dùng last valid MPC move/physical fallback và ghi emergency rõ ràng.</p>
+          <p className="solver-note">Ground truth chỉ dùng để mô phỏng plant và audit. Khi estimation bật, Event Trigger, MPC, PID và Governor đều nhận x̂. Safety tightening dùng covariance P để co miền quyết định; actual plant safety vẫn được chấm theo envelope vật lý gốc.</p>
         </section>
 
         <section className="lower-grid">
@@ -220,21 +225,22 @@ export default function App() {
           </div>
 
           <div className="panel model-panel">
-            <div className="panel-head"><div><span className="section-tag">SAFETY ARCHITECTURE</span><h2>Two horizons, two compute budgets</h2></div></div>
-            <div className="equation">MPC: X = Φx₀ + ΓU, &nbsp; min ½UᵀHU + fᵀU</div>
-            <div className="equation">Governor: uPID ∈ [uL(x), uU(x)] over Hsafe</div>
+            <div className="panel-head"><div><span className="section-tag">CONTROL ARCHITECTURE</span><h2>Prediction, estimation and fast safety</h2></div></div>
+            <div className="equation">Estimator: x̂ₖ, Pₖ ← Kalman(yₖ, uₖ₋₁)</div>
+            <div className="equation">MPC: X = Φx̂₀ + ΓU, &nbsp; min ½UᵀHU + fᵀU</div>
+            <div className="equation">Safety: envelope ← envelope − kσ·sqrt(P)</div>
             <div className="matrix-block"><span>A</span><pre>{model.A}</pre></div>
             <div className="matrix-block"><span>B</span><pre>{model.B}</pre></div>
             <div className="matrix-block"><span>C</span><pre>{model.C}</pre></div>
-            <p className="model-note">MPC horizon dài tối ưu hiệu năng nhưng chạy theo event. Governor horizon ngắn chỉ tạo admissible scalar command interval nên đủ nhẹ để chạy ở vòng PID. Đây là cách giữ ý tưởng ban đầu: giảm solve MPC nhưng không bỏ quyền kiểm soát safety ở fast loop.</p>
+            <p className="model-note">MPC horizon dài tối ưu hiệu năng nhưng chạy theo event. PID phản ứng nhanh. Governor kiểm tra PID first move với MPC continuation plan, còn covariance tightening bù uncertainty của estimator mà không thay đổi tiêu chuẩn audit của plant thật.</p>
           </div>
         </section>
 
         <section className="concept-grid">
-          <div className="concept"><span>01</span><h3>Predict sparsely</h3><p>MPC horizon dài chỉ tái solve khi Event Trigger cho rằng prediction cũ không còn đáng tin.</p></div>
-          <div className="concept"><span>02</span><h3>React fast</h3><p>PID vẫn là fast loop và nhận predictive guidance thay vì bị MPC thay thế hoàn toàn.</p></div>
-          <div className="concept"><span>03</span><h3>Guard cheaply</h3><p>Safety Governor O(H) chạy mỗi sample, thu hẹp lệnh PID vào short-horizon admissible interval.</p></div>
-          <div className="concept"><span>04</span><h3>Measure authority</h3><p>So sánh guidance-only với governed hybrid bằng plant-safety violation, intervention rate và tracking penalty.</p></div>
+          <div className="concept"><span>01</span><h3>Estimate first</h3><p>Controller chỉ nhìn x̂ khi sensor-noise mode được bật; ground truth không đi vào feedback path.</p></div>
+          <div className="concept"><span>02</span><h3>Predict sparsely</h3><p>MPC horizon dài chỉ tái solve khi Event Trigger cho rằng prediction cũ không còn đáng tin.</p></div>
+          <div className="concept"><span>03</span><h3>React and guard</h3><p>PID chạy fast loop, còn Governor thu hẹp command vào miền admissible trước actuator.</p></div>
+          <div className="concept"><span>04</span><h3>Measure uncertainty</h3><p>RMSE, covariance, tightening margin, plant safety và solver feasibility được audit riêng.</p></div>
         </section>
       </main>
     </div>
