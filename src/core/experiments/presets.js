@@ -4,6 +4,7 @@ export const EXPERIMENT_PRESETS = [
     label: 'Baseline hybrid',
     description: 'Default event-triggered MPC + PID with actuator and slew-rate constraints.',
     patch: {
+      estimation: { enabled: false },
       mpc: {
         stateConstraintsEnabled: false,
         outputConstraintsEnabled: false,
@@ -18,6 +19,7 @@ export const EXPERIMENT_PRESETS = [
     label: 'Tight actuator slew rate',
     description: 'Highlights the difference between penalizing Δu and enforcing it as a hard physical limit.',
     patch: {
+      estimation: { enabled: false },
       mpc: {
         stateConstraintsEnabled: false,
         outputConstraintsEnabled: false,
@@ -33,6 +35,7 @@ export const EXPERIMENT_PRESETS = [
     label: 'Predicted safety envelope',
     description: 'Constrains future velocity and measured output so MPC must anticipate the safe region before PID reacts.',
     patch: {
+      estimation: { enabled: false },
       safety: {
         previewHorizon: 8,
         positionMargin: 0,
@@ -60,6 +63,7 @@ export const EXPERIMENT_PRESETS = [
     label: 'Disturbance stress test',
     description: 'Large plant-only disturbance used to study trigger density, recovery and constraint activation.',
     patch: {
+      estimation: { enabled: false },
       safety: {
         previewHorizon: 10,
         positionMargin: 0,
@@ -88,11 +92,54 @@ export const EXPERIMENT_PRESETS = [
     },
   },
   {
+    id: 'noisy-estimation',
+    label: 'Kalman noisy sensor',
+    description: 'Closed-loop hybrid uses only the Kalman state estimate while truth remains available solely for RMSE and safety auditing.',
+    patch: {
+      estimation: {
+        enabled: true,
+        measurementNoiseStd: 0.1,
+        measurementBias: 0,
+        seed: 20260914,
+        processPositionVariance: 2e-5,
+        processVelocityVariance: 2e-4,
+        initialPositionVariance: 0.25,
+        initialVelocityVariance: 0.8,
+      },
+      safety: {
+        previewHorizon: 8,
+        positionMargin: 0.01,
+        velocityMargin: 0.02,
+        outputMargin: 0.01,
+      },
+      mpc: {
+        stateConstraintsEnabled: true,
+        positionMin: -1.5,
+        positionMax: 1.5,
+        velocityMin: -0.9,
+        velocityMax: 0.9,
+        outputConstraintsEnabled: true,
+        outputMin: -0.25,
+        outputMax: 1.06,
+        deltaUMin: -0.45,
+        deltaUMax: 0.45,
+        qpProjectionCycles: 16,
+      },
+      trigger: {
+        predictionError: 0.045,
+        stateChange: 0.09,
+        maxInterval: 0.32,
+      },
+      disturbance: { enabled: true, start: 3.2, duration: 1.0, amplitude: 1.4 },
+    },
+  },
+  {
     id: 'infeasible-guard',
     label: 'Infeasible-envelope guard',
     description: 'Deliberately impossible first-step velocity envelope; validates explicit infeasibility and safe actuator fallback.',
     patch: {
       duration: 2.0,
+      estimation: { enabled: false },
       safety: { previewHorizon: 6 },
       mpc: {
         stateConstraintsEnabled: true,
@@ -124,6 +171,7 @@ export function applyExperimentPreset(baseConfig, id) {
     pid: { ...baseConfig.pid, ...(patch.pid || {}) },
     mpc: { ...baseConfig.mpc, ...(patch.mpc || {}) },
     safety: { ...baseConfig.safety, ...(patch.safety || {}) },
+    estimation: { ...baseConfig.estimation, ...(patch.estimation || {}) },
     trigger: { ...baseConfig.trigger, ...(patch.trigger || {}) },
     disturbance: { ...baseConfig.disturbance, ...(patch.disturbance || {}) },
   };
