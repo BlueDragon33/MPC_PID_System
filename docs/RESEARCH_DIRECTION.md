@@ -28,9 +28,8 @@ MPC là lớp dự đoán và tối ưu. PID là lớp phản xạ nhanh. Event 
 
 ## Thứ tự phát triển bắt buộc
 
-### Gate 1 — Linear baseline
+### Gate 1 — Linear baseline — PASS
 
-PASS khi:
 - PID chạy ổn định trên plant danh định.
 - State-space model được hiển thị và thay đổi được.
 - Periodic MPC tối ưu control sequence, không phải chỉ một input cố định.
@@ -38,18 +37,15 @@ PASS khi:
 - Disturbance tạo được model prediction error.
 - Có metrics chất lượng điều khiển và compute cost.
 
-Không đi tiếp nếu simulation xuất hiện NaN, divergence không giải thích được hoặc solver behavior không lặp lại.
+### Gate 2 — Event-triggered predictive guidance — PASS
 
-### Gate 2 — Event-triggered predictive guidance
-
-PASS khi:
 - Hybrid giữ closed-loop ổn định.
 - Watchdog bảo đảm không dùng prediction vô thời hạn.
-- Trigger có ít nhất: prediction error, state change, constraint proximity, watchdog.
+- Trigger gồm prediction error, state change, constraint proximity và watchdog.
 - Số lần MPC solve thấp hơn periodic MPC đáng kể trong trạng thái bình thường.
-- Giảm compute không đổi lấy suy giảm tracking quá mức.
+- Compute saving được đo cùng tracking quality.
 
-Metric chính:
+Metric tổng quát:
 
 ```text
 J_total = w1 * tracking_error
@@ -58,20 +54,46 @@ J_total = w1 * tracking_error
         + w4 * constraint_violation
 ```
 
-### Gate 3 — QP formulation
+### Gate 3A — Condensed QP + box-constrained MPC — PASS
 
-Không gọi solver hiện tại là industrial QP solver.
+- Prediction matrices `Φ`, `Γ` được xây rõ ràng.
+- Cost được đưa về:
 
-PASS khi:
-- Prediction matrices được xây rõ ràng.
-- Cost được đưa về dạng:
+```text
+0.5 Uᵀ H U + fᵀ U
+```
 
-  0.5 Uᵀ H U + fᵀ U
+- Condensed objective được regression-test trực tiếp với rollout objective.
+- Solver interface tách khỏi controller/simulator.
+- Có `box-qp` backend và projected-gradient baseline.
+- Hard input bounds được giữ khả thi bằng projection.
+- Ghi lại:
+  - convergence,
+  - iterations,
+  - solve time,
+  - KKT residual,
+  - feasibility violation,
+  - active constraints.
+- Dashboard hiển thị solver health thay vì chỉ hiển thị thời gian solve.
 
-- Bounds và rate constraints được biểu diễn độc lập.
-- Solver interface tách khỏi controller.
-- Có benchmark projected-gradient vs QP backend.
-- Ghi lại convergence, iterations, solve time, infeasibility.
+### Gate 3B — General constrained MPC — NEXT
+
+Đây là gate kế tiếp, chưa được coi là PASS cho đến khi có đủ:
+
+- hard slew-rate constraints:
+
+```text
+Δu_min ≤ u_k - u_{k-1} ≤ Δu_max
+```
+
+- state/output inequalities,
+- explicit feasible/infeasible status,
+- fallback behavior khi solver không hội tụ hoặc bài toán infeasible,
+- benchmark nội bộ giữa box-QP và một external QP backend (ưu tiên OSQP/WASM hoặc backend tương đương),
+- reproducible experiment presets,
+- regression scenarios cho constraint activation.
+
+Không bắt đầu Kalman Filter trước khi ít nhất hard `Δu` constraints và solver-failure semantics được hoàn thiện.
 
 ### Gate 4 — Estimation
 
@@ -132,17 +154,21 @@ PASS khi:
 6. Không tối ưu giao diện trước khi core algorithm có test.
 7. Không dùng một plant duy nhất để kết luận controller tốt hơn tổng quát.
 8. Mọi experiment quan trọng phải tái lập được bằng preset/config.
+9. Một solver chỉ được coi là tốt khi **objective + feasibility + optimality + timing** cùng đạt yêu cầu.
+10. Khi solver fail, hệ thống phải có semantics rõ ràng; không được âm thầm dùng một nghiệm không đạt chuẩn.
 
 ## Milestone kế tiếp
 
-**V0.3 — QP-ready MPC core**
+**V0.3B — General constrained MPC**
 
-- prediction matrix builder,
-- condensed quadratic cost,
-- solver adapter interface,
-- Δu and hard input constraints,
-- convergence diagnostics,
-- experiment presets,
-- baseline regression tests.
+Thứ tự thực hiện:
 
-Chỉ sau V0.3 mới bắt đầu Kalman Filter và plant models chuyên biệt.
+1. hard `Δu` constraints,
+2. generalized inequality representation,
+3. feasible/infeasible solver status,
+4. fallback policy,
+5. constraint activation scenarios,
+6. experiment presets,
+7. external QP benchmark.
+
+Sau V0.3B mới mở Gate 4 — State Estimation.
