@@ -27,8 +27,55 @@ function shortScenario(id) {
   };
 }
 
+function diagnosticRow(label, result) {
+  const m = result.metrics;
+  return {
+    estimator: label,
+    IAE: m.iae.toFixed(4),
+    solves: m.solveCount,
+    'conv %': m.convergenceRate == null ? 'n/a' : m.convergenceRate.toFixed(1),
+    fallback: m.fallbackCount,
+    infeasible: m.infeasibleCount,
+    timeout: m.timeoutCount,
+    numerical: m.numericalFailureCount,
+    'QP viol': m.maxFeasibilityViolation == null ? 'n/a' : m.maxFeasibilityViolation.toExponential(2),
+    'plant safety': m.maxActualSafetyViolation.toExponential(2),
+    'unsafe %': m.safetyViolationRate.toFixed(1),
+    xRMSE: m.estimatePositionRmse?.toFixed(4) ?? '—',
+    vRMSE: m.estimateVelocityRmse?.toFixed(4) ?? '—',
+    dRMSE: m.disturbanceEstimateRmse?.toFixed(4) ?? '—',
+    activeDRMSE: m.activeDisturbanceEstimateRmse?.toFixed(4) ?? '—',
+    'max Δx': m.maxUncertaintyPositionMargin.toFixed(4),
+    'max Δv': m.maxUncertaintyVelocityMargin.toFixed(4),
+    'invalid envelope': m.uncertaintyInvalidEnvelopeCount,
+  };
+}
+
 const stateOnly = runSimulation('HYBRID_SAFE', shortScenario('model-mismatch'));
 const augmented = runSimulation('HYBRID_SAFE', shortScenario('mismatch-observer'));
+
+console.log('Model-mismatch disturbance observer diagnostics');
+console.table([
+  diagnosticRow('2-state', stateOnly),
+  diagnosticRow('x-v-d', augmented),
+]);
+
+const augmentedFailures = augmented.solverRecords
+  .filter((record) => record.fallbackUsed || record.status !== 'solved')
+  .map((record, index) => ({
+    index,
+    status: record.status,
+    fallback: record.fallbackUsed,
+    reason: record.fallbackReason ?? '',
+    converged: record.diagnostics?.converged ?? null,
+    iterations: record.diagnostics?.iterations ?? null,
+    feasibility: record.diagnostics?.feasibilityViolation ?? null,
+    residual: record.diagnostics?.projectedGradientResidual ?? record.diagnostics?.kktResidual ?? null,
+  }));
+if (augmentedFailures.length) {
+  console.log('Augmented observer non-solved/fallback MPC calls');
+  console.table(augmentedFailures);
+}
 
 assert(stateOnly.metrics.truthPlantMismatchEnabled, 'State-only case did not activate truth/model mismatch.');
 assert(augmented.metrics.truthPlantMismatchEnabled, 'Augmented case did not activate truth/model mismatch.');
@@ -45,26 +92,3 @@ assert(augmented.metrics.fallbackCount === 0, `Augmented observer caused ${augme
 assert((augmented.metrics.convergenceRate ?? 100) >= 99.9, `Augmented observer convergence dropped to ${augmented.metrics.convergenceRate}%`);
 
 console.log('Model-mismatch disturbance observer smoke PASS');
-console.table([
-  {
-    estimator: '2-state',
-    IAE: stateOnly.metrics.iae.toFixed(4),
-    solves: stateOnly.metrics.solveCount,
-    xRMSE: stateOnly.metrics.estimatePositionRmse?.toFixed(4),
-    vRMSE: stateOnly.metrics.estimateVelocityRmse?.toFixed(4),
-    dRMSE: '—',
-    plantSafety: stateOnly.metrics.maxActualSafetyViolation.toExponential(2),
-    fallback: stateOnly.metrics.fallbackCount,
-  },
-  {
-    estimator: 'x-v-d',
-    IAE: augmented.metrics.iae.toFixed(4),
-    solves: augmented.metrics.solveCount,
-    xRMSE: augmented.metrics.estimatePositionRmse?.toFixed(4),
-    vRMSE: augmented.metrics.estimateVelocityRmse?.toFixed(4),
-    dRMSE: augmented.metrics.disturbanceEstimateRmse?.toFixed(4),
-    activeDRMSE: augmented.metrics.activeDisturbanceEstimateRmse?.toFixed(4),
-    plantSafety: augmented.metrics.maxActualSafetyViolation.toExponential(2),
-    fallback: augmented.metrics.fallbackCount,
-  },
-]);
