@@ -1,29 +1,11 @@
-import { createSecondOrderModel, stepSecondOrderPlant } from '../models/secondOrderPlant.js';
+import { createSecondOrderModel } from '../models/secondOrderPlant.js';
+import { rolloutMPCSequence } from '../mpc/rollout.js';
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const now = () => (typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now());
 
-function rollout(state, sequence, target, previousU, cfg) {
-  const xs = [{ ...state }];
-  let cost = 0;
-  let prev = previousU;
-
-  for (let i = 0; i < sequence.length; i += 1) {
-    const u = sequence[i];
-    const next = stepSecondOrderPlant(xs[i], u, 0, cfg);
-    xs.push(next);
-    const terminal = i === sequence.length - 1 ? cfg.mpc.terminalWeight : 1;
-    const e = next.x - target;
-    cost += terminal * (cfg.mpc.qPosition * e * e + cfg.mpc.qVelocity * next.v * next.v);
-    cost += cfg.mpc.rInput * u * u + cfg.mpc.rDelta * (u - prev) * (u - prev);
-    prev = u;
-  }
-
-  return { xs, cost };
-}
-
 export function evaluateMPCSequenceCost(state, sequence, target, previousU, cfg) {
-  return rollout(state, sequence, target, previousU, cfg).cost;
+  return rolloutMPCSequence(state, sequence, target, previousU, cfg).cost;
 }
 
 function stateGradient(state, target, cfg, weight = 1) {
@@ -67,7 +49,7 @@ export function solveProjectedGradientMPC(state, target, previousU, cfg, warmSta
     : new Array(n).fill(previousU);
 
   for (let iter = 0; iter < cfg.mpc.iterations; iter += 1) {
-    const { xs } = rollout(state, us, target, previousU, cfg);
+    const { xs } = rolloutMPCSequence(state, us, target, previousU, cfg);
     const grad = sequenceGradient(xs, us, target, previousU, cfg);
     const step = cfg.mpc.learningRate / (1 + iter * 0.035);
     for (let i = 0; i < us.length; i += 1) {
@@ -75,7 +57,7 @@ export function solveProjectedGradientMPC(state, target, previousU, cfg, warmSta
     }
   }
 
-  const result = rollout(state, us, target, previousU, cfg);
+  const result = rolloutMPCSequence(state, us, target, previousU, cfg);
   return {
     u: us[0],
     sequence: us,
@@ -83,5 +65,13 @@ export function solveProjectedGradientMPC(state, target, previousU, cfg, warmSta
     cost: result.cost,
     solveMs: now() - started,
     solver: 'projected-gradient',
+    diagnostics: {
+      converged: null,
+      iterations: cfg.mpc.iterations,
+      kktResidual: null,
+      feasibilityViolation: 0,
+      activeConstraints: us.filter((u) => Math.abs(u - cfg.mpc.uMin) < 1e-9 || Math.abs(u - cfg.mpc.uMax) < 1e-9).length,
+      activeConstraintRatio: us.length ? us.filter((u) => Math.abs(u - cfg.mpc.uMin) < 1e-9 || Math.abs(u - cfg.mpc.uMax) < 1e-9).length / us.length : 0,
+    },
   };
 }
