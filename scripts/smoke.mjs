@@ -1,5 +1,6 @@
 import { compareControllers, defaultConfig, getStateSpaceModel } from '../src/core/simulator.js';
-import { buildCondensedQP, qpDiagnostics } from '../src/core/mpc/condensedQP.js';
+import { buildCondensedQP, evaluateCondensedQP, qpDiagnostics } from '../src/core/mpc/condensedQP.js';
+import { evaluateMPCSequenceCost } from '../src/core/solvers/projectedGradientMPC.js';
 
 const results = compareControllers(defaultConfig);
 const byMode = Object.fromEntries(results.map((r) => [r.mode, r]));
@@ -24,12 +25,14 @@ const disturbanceSamples = byMode.HYBRID.samples.filter((p) => Math.abs(p.distur
 assert(disturbanceSamples.length > 0, 'Default experiment must contain disturbance injection');
 
 const model = getStateSpaceModel(defaultConfig);
+const qpState = { x: 0.2, v: -0.1 };
+const qpPreviousU = 0.3;
 const qp = buildCondensedQP({
   A: model.A,
   B: model.B,
-  state: { x: 0, v: 0 },
+  state: qpState,
   target: defaultConfig.setpoint,
-  previousU: 0,
+  previousU: qpPreviousU,
   cfg: defaultConfig,
 });
 const qpInfo = qpDiagnostics(qp);
@@ -41,8 +44,17 @@ assert(qpInfo.finite, 'QP formulation contains non-finite values');
 assert(qpInfo.maxSymmetryError < 1e-9, `QP Hessian is not symmetric: ${qpInfo.maxSymmetryError}`);
 assert(qpInfo.minDiagonal > 0, 'QP Hessian diagonal must be positive for the default problem');
 
+const U0 = new Array(defaultConfig.mpc.horizon).fill(0);
+const U1 = Array.from({ length: defaultConfig.mpc.horizon }, (_, i) => 0.15 + 0.22 * Math.sin(i * 0.31));
+const direct0 = evaluateMPCSequenceCost(qpState, U0, defaultConfig.setpoint, qpPreviousU, defaultConfig);
+const direct1 = evaluateMPCSequenceCost(qpState, U1, defaultConfig.setpoint, qpPreviousU, defaultConfig);
+const condensed0 = evaluateCondensedQP(qp, U0);
+const condensed1 = evaluateCondensedQP(qp, U1);
+const objectiveDeltaError = Math.abs((direct1 - direct0) - (condensed1 - condensed0));
+assert(objectiveDeltaError < 1e-8, `Condensed QP objective does not match rollout cost: ${objectiveDeltaError}`);
+
 console.log('MPC_PID_System smoke test PASS');
 for (const result of results) {
   console.log(`${result.mode}: IAE=${result.metrics.iae.toFixed(4)}, solves=${result.metrics.solveCount}, reduction=${result.metrics.computeReduction.toFixed(1)}%`);
 }
-console.log(`QP: n=${qpInfo.dimension}, symmetryError=${qpInfo.maxSymmetryError.toExponential(2)}, minDiagonal=${qpInfo.minDiagonal.toFixed(6)}`);
+console.log(`QP: n=${qpInfo.dimension}, symmetryError=${qpInfo.maxSymmetryError.toExponential(2)}, minDiagonal=${qpInfo.minDiagonal.toFixed(6)}, objectiveDeltaError=${objectiveDeltaError.toExponential(2)}`);
