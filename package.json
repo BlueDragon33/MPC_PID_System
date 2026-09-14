@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "smoke": "node scripts/smoke.mjs",
+    "smoke": "node scripts/smoke.mjs && node scripts/experimentRoundtrip.mjs",
     "benchmark": "node scripts/benchmark.mjs"
   },
   "dependencies": {
