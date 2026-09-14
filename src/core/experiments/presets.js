@@ -106,7 +106,7 @@ export const EXPERIMENT_PRESETS = [
         initialPositionVariance: 0.04,
         initialVelocityVariance: 0.06,
         constraintTighteningEnabled: true,
-        constraintSigma: 2.0,
+        constraintSigma: 1.5,
       },
       safety: {
         previewHorizon: 8,
