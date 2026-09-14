@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Activity, BrainCircuit, Cpu, Gauge, Play, Radar, SlidersHorizontal, TimerReset, Waves } from 'lucide-react';
+import ExperimentSafetyPanel from './components/ExperimentSafetyPanel.jsx';
 import { compareControllers, defaultConfig, getStateSpaceModel } from './core/simulator.js';
 import { SOLVER_BACKENDS } from './core/solvers/index.js';
 import './solverDiagnostics.css';
@@ -99,6 +100,7 @@ function fmtScientific(value) {
 export default function App() {
   const [cfg, setCfg] = useState(defaultConfig);
   const [activeMode, setActiveMode] = useState('HYBRID');
+  const [presetId, setPresetId] = useState('baseline');
   const results = useMemo(() => compareControllers(cfg), [cfg]);
   const active = results.find((r) => r.mode === activeMode);
   const hybrid = results.find((r) => r.mode === 'HYBRID');
@@ -108,6 +110,7 @@ export default function App() {
   const usingBoxQP = cfg.mpc.solver === SOLVER_BACKENDS.BOX_QP;
   const usingQPSolver = usingConstrainedQP || usingBoxQP;
   const solverLabel = usingConstrainedQP ? 'Constrained QP' : usingBoxQP ? 'Box QP' : 'Projected gradient';
+  const safetyEnabled = cfg.mpc.stateConstraintsEnabled || cfg.mpc.outputConstraintsEnabled;
 
   return (
     <div className="app-shell">
@@ -120,20 +123,20 @@ export default function App() {
           <a><Cpu size={18}/>Solver Diagnostics</a>
           <a><TimerReset size={18}/>Experiments</a>
         </nav>
-        <div className="sidebar-note"><b>V0.3B General Constraints</b><span>AU ≤ b · hard Δu · feasibility · fallback semantics</span></div>
+        <div className="sidebar-note"><b>V0.3C Safety Envelope</b><span>predicted state/output constraints · presets · plant-safety audit</span></div>
       </aside>
 
       <main>
         <header>
-          <div><p className="eyebrow">ADVANCED CONTROL WORKBENCH</p><h1>Constrain the future, not just the actuator.</h1><p className="subtitle">MPC giờ xử lý hard input bounds và hard Δu bounds trong dạng AU ≤ b. Solver phải báo rõ solved, approximate, timeout hay infeasible; hybrid chỉ nhận guidance mới khi nghiệm đủ an toàn để sử dụng.</p></div>
-          <button className="run"><Play size={17} fill="currentColor"/>Deterministic simulation</button>
+          <div><p className="eyebrow">ADVANCED CONTROL WORKBENCH</p><h1>Constrain the predicted future. Audit the real plant.</h1><p className="subtitle">Input, Δu, state và output constraints cùng đi vào AU ≤ b. QP feasibility cho biết model có nằm trong miền an toàn dự đoán hay không; plant-safety metric kiểm tra riêng những gì thật sự xảy ra sau PID và disturbance.</p></div>
+          <button className="run"><Play size={17} fill="currentColor"/>Reproducible experiment</button>
         </header>
 
         <section className="kpi-grid">
-          <div className="kpi"><span>Architecture</span><strong>MPC predictor → PID</strong><small>event-triggered predictive guidance</small></div>
-          <div className="kpi"><span>Solver backend</span><strong>{solverLabel}</strong><small>{usingConstrainedQP ? 'polyhedral QP · AU ≤ b' : usingBoxQP ? 'box-constrained QP baseline' : 'legacy sequence optimizer'}</small></div>
+          <div className="kpi"><span>Solver backend</span><strong>{solverLabel}</strong><small>{usingConstrainedQP ? 'general polyhedral QP' : 'research baseline'}</small></div>
           <div className="kpi"><span>Hybrid fallback</span><strong>{hybrid.metrics.fallbackRate.toFixed(1)}%</strong><small>{hybrid.metrics.fallbackCount} fallback solves</small></div>
           <div className="kpi"><span>Compute avoided</span><strong>{hybrid.metrics.computeReduction.toFixed(1)}%</strong><small>vs solving MPC every sample</small></div>
+          <div className={`kpi ${hybrid.metrics.maxActualSafetyViolation <= 1e-9 ? '' : 'kpi-warning'}`}><span>Actual safety violation</span><strong>{safetyEnabled ? fmtScientific(hybrid.metrics.maxActualSafetyViolation) : 'OFF'}</strong><small>{safetyEnabled ? `${hybrid.metrics.safetyViolationRate.toFixed(1)}% samples outside envelope` : 'enable predicted envelope to audit'}</small></div>
         </section>
 
         <section className="workspace">
@@ -161,7 +164,7 @@ export default function App() {
                 { value: SOLVER_BACKENDS.BOX_QP, label: 'Box QP' },
                 { value: SOLVER_BACKENDS.PROJECTED_GRADIENT, label: 'Projected gradient' },
               ]}/>
-              <span className="solver-badge"><Cpu size={12}/>{usingConstrainedQP ? 'AU≤b monitored' : usingBoxQP ? 'KKT monitored' : 'baseline backend'}</span>
+              <span className="solver-badge"><Cpu size={12}/>{usingConstrainedQP ? 'AU≤b monitored' : usingBoxQP ? 'box KKT monitored' : 'baseline backend'}</span>
               {usingQPSolver ? <>
                 <NumberField label="QP iterations" value={cfg.mpc.qpIterations} step={10} onChange={(v) => update('mpc', 'qpIterations', Math.max(1, Math.round(v)))}/>
                 <NumberField label="QP tolerance" value={cfg.mpc.qpTolerance} step={0.0001} onChange={(v) => update('mpc', 'qpTolerance', Math.max(1e-10, v))}/>
@@ -177,6 +180,7 @@ export default function App() {
 
             <div className="control-group"><h3>Predictive cost</h3><NumberField label="Horizon" value={cfg.mpc.horizon} step={1} onChange={(v) => update('mpc', 'horizon', Math.max(3, Math.round(v)))}/><NumberField label="Q position" value={cfg.mpc.qPosition} onChange={(v) => update('mpc', 'qPosition', Math.max(0, v))}/><NumberField label="Q velocity" value={cfg.mpc.qVelocity} onChange={(v) => update('mpc', 'qVelocity', Math.max(0, v))}/><NumberField label="R input" value={cfg.mpc.rInput} onChange={(v) => update('mpc', 'rInput', Math.max(0, v))}/><NumberField label="R Δu" value={cfg.mpc.rDelta} onChange={(v) => update('mpc', 'rDelta', Math.max(0, v))}/><NumberField label="Terminal weight" value={cfg.mpc.terminalWeight} step={0.5} onChange={(v) => update('mpc', 'terminalWeight', Math.max(1, v))}/></div>
             <div className="control-group constraint-controls"><h3>Hard actuator constraints</h3><NumberField label="u min" value={cfg.mpc.uMin} step={0.1} onChange={(v) => update('mpc', 'uMin', Math.min(v, cfg.mpc.uMax))}/><NumberField label="u max" value={cfg.mpc.uMax} step={0.1} onChange={(v) => update('mpc', 'uMax', Math.max(v, cfg.mpc.uMin))}/><NumberField label="Δu min / sample" value={cfg.mpc.deltaUMin} step={0.05} onChange={(v) => update('mpc', 'deltaUMin', Math.min(v, cfg.mpc.deltaUMax))}/><NumberField label="Δu max / sample" value={cfg.mpc.deltaUMax} step={0.05} onChange={(v) => update('mpc', 'deltaUMax', Math.max(v, cfg.mpc.deltaUMin))}/></div>
+            <ExperimentSafetyPanel cfg={cfg} setCfg={setCfg} presetId={presetId} setPresetId={setPresetId}/>
             <div className="control-group guidance-controls"><h3>MPC → PID guidance</h3><NumberField label="Reference lead" value={cfg.mpc.referenceLead} step={0.05} onChange={(v) => update('mpc', 'referenceLead', Math.max(0, v))}/><NumberField label="Velocity damping" value={cfg.mpc.velocityDamping} step={0.01} onChange={(v) => update('mpc', 'velocityDamping', Math.max(0, v))}/><NumberField label="Lead clamp" value={cfg.mpc.maxReferenceLead} step={0.05} onChange={(v) => update('mpc', 'maxReferenceLead', Math.max(0, v))}/></div>
             <div className="control-group accent"><h3>Event trigger</h3><NumberField label="Prediction error" value={cfg.trigger.predictionError} step={0.005} onChange={(v) => update('trigger', 'predictionError', Math.max(0.001, v))}/><NumberField label="State change" value={cfg.trigger.stateChange} step={0.01} onChange={(v) => update('trigger', 'stateChange', Math.max(0.001, v))}/><NumberField label="Min interval (s)" value={cfg.trigger.minInterval} step={0.02} onChange={(v) => update('trigger', 'minInterval', Math.max(cfg.dt, v))}/><NumberField label="Watchdog (s)" value={cfg.trigger.maxInterval} step={0.02} onChange={(v) => update('trigger', 'maxInterval', Math.max(cfg.trigger.minInterval, v))}/></div>
             <div className="control-group disturbance-controls"><h3>Disturbance injection</h3><ToggleField label="Enabled" checked={cfg.disturbance.enabled} onChange={(v) => update('disturbance', 'enabled', v)}/><NumberField label="Start (s)" value={cfg.disturbance.start} step={0.1} onChange={(v) => update('disturbance', 'start', Math.max(0, v))}/><NumberField label="Duration (s)" value={cfg.disturbance.duration} step={0.1} onChange={(v) => update('disturbance', 'duration', Math.max(cfg.dt, v))}/><NumberField label="Amplitude" value={cfg.disturbance.amplitude} step={0.1} onChange={(v) => update('disturbance', 'amplitude', v)}/></div>
@@ -184,43 +188,45 @@ export default function App() {
         </section>
 
         <section className="panel diagnostics-panel">
-          <div className="panel-head"><div><span className="section-tag">SOLVER HEALTH</span><h2>{activeMode === 'PID' ? 'No optimizer in PID mode' : `${activeMode === 'HYBRID' ? 'Hybrid' : 'Periodic MPC'} constrained-solver diagnostics`}</h2></div><span className="solver-badge">{cfg.mpc.solver}</span></div>
-          <div className="diagnostics-grid">
+          <div className="panel-head"><div><span className="section-tag">SOLVER + SAFETY HEALTH</span><h2>{activeMode === 'PID' ? 'No optimizer in PID mode' : `${activeMode === 'HYBRID' ? 'Hybrid' : 'Periodic MPC'} model and plant audit`}</h2></div><span className="solver-badge">{cfg.mpc.solver}</span></div>
+          <div className="diagnostics-grid diagnostics-grid-wide">
             <div className={`diag-card ${(active.metrics.convergenceRate ?? 100) >= 95 ? 'diag-good' : 'diag-warn'}`}><span>Convergence</span><strong>{active.metrics.convergenceRate == null ? 'N/A' : `${active.metrics.convergenceRate.toFixed(1)}%`}</strong><small>strict stationarity tolerance</small></div>
             <div className="diag-card"><span>Average iterations</span><strong>{active.metrics.avgIterations ? active.metrics.avgIterations.toFixed(1) : '—'}</strong><small>iterations per optimization call</small></div>
             <div className="diag-card"><span>Stationarity residual</span><strong>{fmtScientific(active.metrics.avgStationarityResidual)}</strong><small>projected-gradient/KKT residual</small></div>
-            <div className={`diag-card ${(active.metrics.maxFeasibilityViolation ?? 0) <= 1e-6 ? 'diag-good' : 'diag-warn'}`}><span>Max feasibility violation</span><strong>{fmtScientific(active.metrics.maxFeasibilityViolation)}</strong><small>maximum violation of AU ≤ b</small></div>
-            <div className="diag-card"><span>Active constraints</span><strong>{active.metrics.avgActiveConstraintRatio ? `${(100 * active.metrics.avgActiveConstraintRatio).toFixed(1)}%` : '0%'}</strong><small>input/rate inequalities near active</small></div>
+            <div className={`diag-card ${(active.metrics.maxFeasibilityViolation ?? 0) <= 1e-6 ? 'diag-good' : 'diag-warn'}`}><span>QP feasibility</span><strong>{fmtScientific(active.metrics.maxFeasibilityViolation)}</strong><small>maximum predicted AU ≤ b violation</small></div>
+            <div className={`diag-card ${active.metrics.maxActualSafetyViolation <= 1e-9 ? 'diag-good' : 'diag-warn'}`}><span>Real plant safety</span><strong>{safetyEnabled ? fmtScientific(active.metrics.maxActualSafetyViolation) : 'OFF'}</strong><small>{safetyEnabled ? `${active.metrics.safetyViolationRate.toFixed(1)}% unsafe samples` : 'state/output envelope disabled'}</small></div>
+            <div className="diag-card"><span>Safety constraint active</span><strong>{safetyEnabled ? `${active.metrics.stateConstraintActiveSolveRate.toFixed(1)}%` : 'OFF'}</strong><small>solves touching state/output boundary</small></div>
             <div className={`diag-card ${active.metrics.fallbackCount === 0 ? 'diag-good' : 'diag-warn'}`}><span>Fallback</span><strong>{active.metrics.fallbackCount}</strong><small>{active.metrics.timeoutCount} timeout · {active.metrics.infeasibleCount} infeasible</small></div>
           </div>
-          <p className="solver-note">V0.3B phân biệt ba lớp: optimality, feasibility và execution status. Một nghiệm có thể chưa đạt tolerance tối ưu nhưng vẫn feasible và được chấp nhận approximate; timeout, infeasible hoặc numerical failure sẽ kích hoạt fallback semantics thay vì âm thầm phát lệnh mới.</p>
+          <p className="solver-note">V0.3C tách rõ model safety khỏi plant safety. Periodic MPC trực tiếp thi hành nghiệm tối ưu; hybrid hiện dùng MPC để tạo guidance cho PID nên predicted feasibility chưa đồng nghĩa với bảo đảm an toàn tuyệt đối của plant thật. Khoảng cách này được đo thay vì bị che giấu.</p>
         </section>
 
         <section className="lower-grid">
           <div className="panel analysis-panel">
-            <div className="panel-head"><div><span className="section-tag">ANALYSIS</span><h2>Controller and solver efficiency</h2></div></div>
+            <div className="panel-head"><div><span className="section-tag">ANALYSIS</span><h2>Controller, solver and safety efficiency</h2></div></div>
             <div className="comparison-table">
-              <div className="table-row table-head solver-table-row"><span>Controller</span><span>IAE</span><span>MPC solves</span><span>Avg solve</span><span>Converged</span><span>Residual</span><span>Fallback</span></div>
-              {results.map((r) => <div className={`table-row solver-table-row ${r.mode === activeMode ? 'row-active' : ''}`} key={r.mode} onClick={() => setActiveMode(r.mode)}><b>{r.mode === 'HYBRID' ? 'Event MPC + PID' : r.mode}</b><span>{r.metrics.iae.toFixed(3)}</span><span>{r.metrics.solveCount}</span><span>{r.metrics.avgSolveMs.toFixed(3)} ms</span><span>{r.metrics.convergenceRate == null ? '—' : `${r.metrics.convergenceRate.toFixed(1)}%`}</span><span>{fmtScientific(r.metrics.avgStationarityResidual)}</span><span>{r.metrics.fallbackCount}</span></div>)}
+              <div className="table-row table-head solver-table-row"><span>Controller</span><span>IAE</span><span>MPC solves</span><span>Avg solve</span><span>QP viol.</span><span>Plant safety</span><span>Fallback</span></div>
+              {results.map((r) => <div className={`table-row solver-table-row ${r.mode === activeMode ? 'row-active' : ''}`} key={r.mode} onClick={() => setActiveMode(r.mode)}><b>{r.mode === 'HYBRID' ? 'Event MPC + PID' : r.mode}</b><span>{r.metrics.iae.toFixed(3)}</span><span>{r.metrics.solveCount}</span><span>{r.metrics.avgSolveMs.toFixed(3)} ms</span><span>{fmtScientific(r.metrics.maxFeasibilityViolation)}</span><span>{safetyEnabled ? fmtScientific(r.metrics.maxActualSafetyViolation) : '—'}</span><span>{r.metrics.fallbackCount}</span></div>)}
             </div>
           </div>
 
           <div className="panel model-panel">
             <div className="panel-head"><div><span className="section-tag">MODEL + CONSTRAINTS</span><h2>Discrete state-space</h2></div></div>
             <div className="equation">xₖ₊₁ = A xₖ + B uₖ + E dₖ</div>
+            <div className="equation">X = Φx₀ + ΓU</div>
             <div className="equation">min ½UᵀHU + fᵀU &nbsp; s.t. &nbsp; AU ≤ b</div>
             <div className="matrix-block"><span>A</span><pre>{model.A}</pre></div>
             <div className="matrix-block"><span>B</span><pre>{model.B}</pre></div>
             <div className="matrix-block"><span>C</span><pre>{model.C}</pre></div>
-            <p className="model-note">Hard Δu giới hạn tốc độ thay đổi actuator theo từng sample. Đây là bước cần thiết trước khi đưa steering servo, thrust hoặc motor thật vào mô hình.</p>
+            <p className="model-note">A·U≤b hiện có thể chứa input, slew-rate, predicted position, velocity và output inequalities. Constraint activation được theo dõi riêng để biết MPC đang thực sự dùng miền an toàn hay chỉ chạy trong vùng tự do.</p>
           </div>
         </section>
 
         <section className="concept-grid">
-          <div className="concept"><span>01</span><h3>Condense</h3><p>State trajectory được gom vào Φ và Γ để MPC trở thành QP trực tiếp trên vector U.</p></div>
-          <div className="concept"><span>02</span><h3>Constrain</h3><p>Input bounds và hard Δu được biểu diễn thống nhất trong polyhedron AU ≤ b.</p></div>
-          <div className="concept"><span>03</span><h3>Fail safely</h3><p>Timeout, infeasible và numerical failure có status rõ ràng; hybrid giữ guidance hợp lệ trước đó khi solver fallback.</p></div>
-          <div className="concept"><span>04</span><h3>Trigger</h3><p>Event layer vẫn quyết định khi nào chi phí tái tối ưu đáng trả hơn việc tiếp tục dùng guidance hiện tại.</p></div>
+          <div className="concept"><span>01</span><h3>Predict</h3><p>Φ và Γ biến tương lai của state/output thành hàm tuyến tính của toàn control sequence U.</p></div>
+          <div className="concept"><span>02</span><h3>Constrain</h3><p>Input, Δu, state và output cùng nằm trong một polyhedron AU ≤ b.</p></div>
+          <div className="concept"><span>03</span><h3>Reproduce</h3><p>Preset cố định scenario, disturbance và envelope để mọi kết quả có thể chạy lại và benchmark.</p></div>
+          <div className="concept"><span>04</span><h3>Audit reality</h3><p>Model feasibility và plant safety được đo tách biệt, chuẩn bị cho Safety Governor nếu guidance-only chưa đủ.</p></div>
         </section>
       </main>
     </div>
