@@ -60,6 +60,7 @@ export function createAugmentedDisturbanceKalmanFilter({
   measurementVariance = 0.01,
   initialState = [0, 0, 0],
   initialCovariance = [0.25, 0.5, 1.0],
+  disturbanceRetention = 1,
 }) {
   if (!Array.isArray(A) || A.length !== 2 || !Array.isArray(A[0]) || A[0].length !== 2) {
     throw new Error('Augmented Kalman filter requires a 2x2 plant matrix A.');
@@ -68,10 +69,11 @@ export function createAugmentedDisturbanceKalmanFilter({
   if (!Array.isArray(E) || E.length !== 2) throw new Error('Augmented Kalman filter requires a two-element disturbance vector E.');
   if (!Array.isArray(C) || C.length !== 2) throw new Error('Augmented Kalman filter requires a two-element measurement row C.');
 
+  const rhoD = Math.max(0, Math.min(1, finite(disturbanceRetention, 1)));
   const Aaug = [
     [A[0][0], A[0][1], E[0]],
     [A[1][0], A[1][1], E[1]],
-    [0, 0, 1],
+    [0, 0, rhoD],
   ];
   const Baug = [B[0], B[1], 0];
   const Caug = [C[0], C[1], 0];
@@ -113,6 +115,7 @@ export function createAugmentedDisturbanceKalmanFilter({
       kalmanGain: [...K],
       covarianceTrace: P[0][0] + P[1][1] + P[2][2],
       disturbanceVariance: P[2][2],
+      disturbanceRetention: rhoD,
     };
 
     return {
@@ -133,6 +136,7 @@ export function createAugmentedDisturbanceKalmanFilter({
     Aaug,
     Baug,
     Caug,
+    disturbanceRetention: rhoD,
     predict,
     update,
     step,
