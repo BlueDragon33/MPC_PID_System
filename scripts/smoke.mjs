@@ -2,6 +2,7 @@ import { compareControllers, defaultConfig, getStateSpaceModel, runSimulation } 
 import { applyExperimentPreset } from '../src/core/experiments/presets.js';
 import { buildCondensedQP, evaluateCondensedQP, qpDiagnostics } from '../src/core/mpc/condensedQP.js';
 import { inequalityViolation } from '../src/core/mpc/constraints.js';
+import { computeAdmissibleCommandInterval } from '../src/core/safety/shortHorizonGovernor.js';
 import { evaluateMPCSequenceCost } from '../src/core/solvers/projectedGradientMPC.js';
 import { solveBoxQPMPC } from '../src/core/solvers/boxQPMPC.js';
 import { solveConstrainedQPMPC } from '../src/core/solvers/constrainedQPMPC.js';
@@ -55,6 +56,7 @@ assert(Number.isFinite(byMode.HYBRID.metrics.avgIterations), 'Hybrid solver iter
 assert(byMode.HYBRID.metrics.maxFeasibilityViolation <= 1e-6, 'Hybrid QP must remain feasible under hard inequalities');
 assert(byMode.HYBRID.metrics.infeasibleCount === 0, 'Default hybrid experiment must not become infeasible');
 assert(byMode.HYBRID.metrics.numericalFailureCount === 0, 'Default hybrid experiment must not have numerical failures');
+assert(byMode.HYBRID_SAFE.metrics.governorEnabled, 'HYBRID_SAFE must enable the safety governor');
 
 const disturbanceSamples = byMode.HYBRID.samples.filter((p) => Math.abs(p.disturbance) > 1e-9);
 assert(disturbanceSamples.length > 0, 'Default experiment must contain disturbance injection');
@@ -137,6 +139,7 @@ const safetyConfig = {
   ...safetyBase,
   duration: 2.5,
   disturbance: { ...safetyBase.disturbance, enabled: false },
+  safety: { ...defaultConfig.safety, previewHorizon: 8 },
   mpc: {
     ...safetyBase.mpc,
     horizon: 16,
@@ -158,9 +161,31 @@ assertPredictedEnvelope(safetySolution.path, safetyConfig);
 const safetyPeriodic = runSimulation('MPC', safetyConfig);
 assert(safetyPeriodic.metrics.maxActualSafetyViolation <= 3e-4, `Nominal periodic MPC left safety envelope: ${safetyPeriodic.metrics.maxActualSafetyViolation}`);
 
+const nearBoundaryInterval = computeAdmissibleCommandInterval({ x: 0.95, v: 0.65 }, 0, safetyConfig);
+assert(nearBoundaryInterval.feasible, 'Governor should find an admissible interval near, but inside, the safety boundary');
+assert(nearBoundaryInterval.upper < safetyConfig.mpc.uMax, 'Governor should tighten the upper command bound near the safety boundary');
+
+const governorConfig = {
+  ...safetyConfig,
+  duration: 2.0,
+  mpc: {
+    ...safetyConfig.mpc,
+    horizon: 12,
+    qpIterations: 80,
+    qpProjectionCycles: 12,
+  },
+};
+const guidanceOnly = runSimulation('HYBRID', governorConfig);
+const governedHybrid = runSimulation('HYBRID_SAFE', governorConfig);
+assert(governedHybrid.metrics.governorInterventionCount > 0, 'Safety governor must intervene in the safety-envelope scenario');
+assert(governedHybrid.metrics.maxActualSafetyViolation <= guidanceOnly.metrics.maxActualSafetyViolation + 1e-8, 'Safety governor must not worsen actual plant safety');
+assert(governedHybrid.metrics.safetyViolationRate <= guidanceOnly.metrics.safetyViolationRate + 1e-8, 'Safety governor must not increase unsafe-sample rate');
+assert(governedHybrid.metrics.governorEmergencyCount === 0, 'Nominal safety-envelope governor should not require emergency fallback');
+
 const guardBase = applyExperimentPreset(defaultConfig, 'infeasible-guard');
 const guardConfig = {
   ...guardBase,
+  safety: { ...defaultConfig.safety, previewHorizon: 6 },
   mpc: {
     ...guardBase.mpc,
     horizon: 8,
@@ -191,9 +216,10 @@ assert(impossibleSolution.fallbackUsed, 'Infeasible QP must activate fallback se
 console.log('MPC_PID_System smoke test PASS');
 for (const result of results) {
   const convergence = result.metrics.convergenceRate == null ? 'n/a' : `${result.metrics.convergenceRate.toFixed(1)}%`;
-  console.log(`${result.mode}: IAE=${result.metrics.iae.toFixed(4)}, solves=${result.metrics.solveCount}, reduction=${result.metrics.computeReduction.toFixed(1)}%, convergence=${convergence}, fallback=${result.metrics.fallbackCount}`);
+  console.log(`${result.mode}: IAE=${result.metrics.iae.toFixed(4)}, solves=${result.metrics.solveCount}, reduction=${result.metrics.computeReduction.toFixed(1)}%, convergence=${convergence}, fallback=${result.metrics.fallbackCount}, governor=${result.metrics.governorInterventionCount}`);
 }
 console.log(`QP: n=${qpInfo.dimension}, inequalities=${qpInfo.inequalities}, symmetryError=${qpInfo.maxSymmetryError.toExponential(2)}, objectiveDeltaError=${objectiveDeltaError.toExponential(2)}`);
 console.log(`ConstrainedQP: status=${constrainedSolution.status}, residual=${constrainedSolution.diagnostics.projectedGradientResidual.toExponential(2)}, feasibility=${constrainedSolution.diagnostics.feasibilityViolation.toExponential(2)}, projections=${constrainedSolution.diagnostics.projectionCycles}`);
 console.log(`SafetyQP: inequalities=${safetyQPInfo.inequalities}, state=${safetyQPInfo.stateConstraintCount}, output=${safetyQPInfo.outputConstraintCount}, plantViolation=${safetyPeriodic.metrics.maxActualSafetyViolation.toExponential(2)}`);
+console.log(`SafetyGovernor: guidanceViolation=${guidanceOnly.metrics.maxActualSafetyViolation.toExponential(2)}, governedViolation=${governedHybrid.metrics.maxActualSafetyViolation.toExponential(2)}, interventions=${governedHybrid.metrics.governorInterventionCount}`);
 console.log(`Guard: status=${guardSolution.status}, fallback=${guardSolution.fallbackUsed}, actuatorSafe=${guardSolution.diagnostics.fallbackActuatorFeasible}`);
