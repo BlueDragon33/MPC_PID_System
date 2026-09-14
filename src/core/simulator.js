@@ -1,5 +1,6 @@
 import { createPIDController } from './controllers/pid.js';
 import { createSecondOrderModel, disturbanceAt, stepSecondOrderPlant } from './models/secondOrderPlant.js';
+import { computeAdmissibleCommandInterval, applySafetyGovernor } from './safety/shortHorizonGovernor.js';
 import { solveMPC, SOLVER_BACKENDS } from './solvers/index.js';
 import { evaluateEventTrigger } from './triggers/eventTrigger.js';
 
@@ -41,6 +42,12 @@ export const defaultConfig = {
     referenceLead: 0.5,
     velocityDamping: 0.08,
     maxReferenceLead: 0.4,
+  },
+  safety: {
+    previewHorizon: 6,
+    positionMargin: 0,
+    velocityMargin: 0,
+    outputMargin: 0,
   },
   trigger: {
     predictionError: 0.035,
@@ -115,6 +122,12 @@ function metrics(samples, target, solverRecords, cfg) {
     const active = item.activeByKind || {};
     return Object.keys(active).some((key) => (key.startsWith('state-') || key.startsWith('output-')) && active[key] > 0);
   }).length;
+  const governorSamples = samples.filter((sample) => sample.governorEnabled);
+  const governorInterventions = governorSamples.filter((sample) => sample.governorIntervened);
+  const governorCorrections = governorSamples.map((sample) => Math.abs(sample.governorCorrection || 0));
+  const governorWidths = governorSamples.map((sample) => sample.governorIntervalWidth).filter(Number.isFinite);
+  const governorInfeasibleCount = governorSamples.filter((sample) => sample.governorFeasible === false).length;
+  const governorEmergencyCount = governorSamples.filter((sample) => sample.governorEmergencyFallback).length;
 
   return {
     overshoot: Math.max(0, ((peak - target) / Math.max(Math.abs(target), 1e-9)) * 100),
@@ -145,6 +158,14 @@ function metrics(samples, target, solverRecords, cfg) {
     safetyViolationCount,
     safetyViolationRate: samples.length ? 100 * safetyViolationCount / samples.length : 0,
     stateConstraintActiveSolveRate: solveCount ? 100 * stateActiveSolves / solveCount : 0,
+    governorEnabled: governorSamples.length > 0,
+    governorInterventionCount: governorInterventions.length,
+    governorInterventionRate: governorSamples.length ? 100 * governorInterventions.length / governorSamples.length : 0,
+    governorAvgCorrection: average(governorCorrections),
+    governorMaxCorrection: governorCorrections.length ? Math.max(...governorCorrections) : 0,
+    governorAvgIntervalWidth: average(governorWidths),
+    governorInfeasibleCount,
+    governorEmergencyCount,
   };
 }
 
@@ -155,6 +176,7 @@ function mergeConfig(userConfig) {
     plant: { ...defaultConfig.plant, ...(userConfig.plant || {}) },
     pid: { ...defaultConfig.pid, ...(userConfig.pid || {}) },
     mpc: { ...defaultConfig.mpc, ...(userConfig.mpc || {}) },
+    safety: { ...defaultConfig.safety, ...(userConfig.safety || {}) },
     trigger: { ...defaultConfig.trigger, ...(userConfig.trigger || {}) },
     disturbance: { ...defaultConfig.disturbance, ...(userConfig.disturbance || {}) },
   };
@@ -168,11 +190,14 @@ export function runSimulation(mode, userConfig = {}) {
   let expectedState = { ...state };
   let lastSolveState = { ...state };
   let previousU = 0;
+  let lastMpcSafeU = 0;
   let lastSolve = -Infinity;
   let reference = cfg.setpoint;
   let warmStart = null;
   const solverRecords = [];
   const samples = [];
+  const hybridMode = mode === 'HYBRID' || mode === 'HYBRID_SAFE';
+  const governorMode = mode === 'HYBRID_SAFE';
 
   function recordSolution(solution) {
     solverRecords.push({
@@ -205,6 +230,9 @@ export function runSimulation(mode, userConfig = {}) {
     let solverDiagnostics = null;
     let solverStatus = null;
     let fallbackUsed = false;
+    let governor = null;
+    let pidRaw = null;
+    let pidNominal = null;
 
     if (mode === 'PID') {
       u = pid.update(cfg.setpoint, state.x);
@@ -212,6 +240,7 @@ export function runSimulation(mode, userConfig = {}) {
       const solution = solveMPC(state, cfg.setpoint, previousU, cfg, warmStart);
       u = solution.u;
       warmStart = solution.sequence;
+      if (!solution.fallbackUsed) lastMpcSafeU = solution.u;
       mpcCost = solution.cost;
       solverDiagnostics = solution.diagnostics || null;
       solverStatus = solution.status || null;
@@ -219,22 +248,54 @@ export function runSimulation(mode, userConfig = {}) {
       recordSolution(solution);
       triggered = true;
       triggerReason = 'periodic';
-    } else if (event.triggered) {
-      const solution = solveMPC(state, cfg.setpoint, previousU, cfg, warmStart);
-      warmStart = solution.sequence;
-      if (!solution.fallbackUsed) reference = predictiveReference(solution, cfg.setpoint, cfg);
-      lastSolve = t;
-      lastSolveState = { ...state };
-      mpcCost = solution.cost;
-      solverDiagnostics = solution.diagnostics || null;
-      solverStatus = solution.status || null;
-      fallbackUsed = Boolean(solution.fallbackUsed);
-      recordSolution(solution);
-      triggered = true;
-      triggerReason = event.reason;
-      u = pid.update(reference, state.x);
-    } else {
-      u = pid.update(reference, state.x);
+    } else if (hybridMode) {
+      if (event.triggered) {
+        const solution = solveMPC(state, cfg.setpoint, previousU, cfg, warmStart);
+        warmStart = solution.sequence;
+        if (!solution.fallbackUsed) {
+          reference = predictiveReference(solution, cfg.setpoint, cfg);
+          lastMpcSafeU = solution.u;
+        }
+        lastSolve = t;
+        lastSolveState = { ...state };
+        mpcCost = solution.cost;
+        solverDiagnostics = solution.diagnostics || null;
+        solverStatus = solution.status || null;
+        fallbackUsed = Boolean(solution.fallbackUsed);
+        recordSolution(solution);
+        triggered = true;
+        triggerReason = event.reason;
+      }
+
+      if (governorMode) {
+        const interval = computeAdmissibleCommandInterval(state, previousU, cfg);
+        const pidResult = pid.updateDetailed(reference, state.x, interval.feasible ? interval : null);
+        pidRaw = pidResult.raw;
+        pidNominal = clamp(pidResult.raw, cfg.pid.uMin, cfg.pid.uMax);
+
+        if (interval.feasible) {
+          u = pidResult.u;
+          governor = {
+            feasible: true,
+            emergencyFallback: false,
+            intervened: Math.abs(u - pidNominal) > 1e-12,
+            correction: u - pidNominal,
+            reason: Math.abs(u - pidNominal) > 1e-12 ? 'pid-limited-by-admissible-interval' : 'proposal-admissible',
+            interval,
+          };
+        } else {
+          governor = applySafetyGovernor({
+            state,
+            proposedU: pidNominal,
+            previousU,
+            lastMpcSafeU,
+            cfg,
+          });
+          u = governor.u;
+        }
+      } else {
+        u = pid.update(reference, state.x);
+      }
     }
 
     const disturbance = disturbanceAt(t, cfg);
@@ -259,6 +320,19 @@ export function runSimulation(mode, userConfig = {}) {
       feasibilityViolation: solverDiagnostics?.feasibilityViolation ?? null,
       activeConstraintRatio: solverDiagnostics?.activeConstraintRatio ?? null,
       safetyViolation: safetyViolationAt(state, cfg),
+      pidRaw,
+      pidNominal,
+      governorEnabled: governorMode,
+      governorFeasible: governor?.feasible ?? null,
+      governorIntervened: governor?.intervened ?? false,
+      governorCorrection: governor?.correction ?? 0,
+      governorEmergencyFallback: governor?.emergencyFallback ?? false,
+      governorReason: governor?.reason ?? null,
+      governorIntervalLower: governor?.interval?.lower ?? null,
+      governorIntervalUpper: governor?.interval?.upper ?? null,
+      governorIntervalWidth: governor?.interval?.feasible && Number.isFinite(governor.interval.lower) && Number.isFinite(governor.interval.upper)
+        ? governor.interval.upper - governor.interval.lower
+        : null,
     });
 
     expectedState = stepSecondOrderPlant(state, u, 0, cfg);
@@ -276,5 +350,5 @@ export function runSimulation(mode, userConfig = {}) {
 }
 
 export function compareControllers(config = {}) {
-  return ['PID', 'MPC', 'HYBRID'].map((mode) => ({ mode, ...runSimulation(mode, config) }));
+  return ['PID', 'MPC', 'HYBRID', 'HYBRID_SAFE'].map((mode) => ({ mode, ...runSimulation(mode, config) }));
 }
