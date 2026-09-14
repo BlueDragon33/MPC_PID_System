@@ -22,6 +22,10 @@ function rollout(state, sequence, target, previousU, cfg) {
   return { xs, cost };
 }
 
+export function evaluateMPCSequenceCost(state, sequence, target, previousU, cfg) {
+  return rollout(state, sequence, target, previousU, cfg).cost;
+}
+
 function stateGradient(state, target, cfg, weight = 1) {
   return [
     2 * weight * cfg.mpc.qPosition * (state.x - target),
