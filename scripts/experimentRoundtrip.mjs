@@ -6,7 +6,7 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-const preset = applyExperimentPreset(defaultConfig, 'safety-envelope');
+const preset = applyExperimentPreset(defaultConfig, 'noisy-estimation');
 const source = {
   ...preset,
   safety: {
@@ -16,11 +16,20 @@ const source = {
     velocityMargin: 0.04,
     outputMargin: 0.02,
   },
+  estimation: {
+    ...preset.estimation,
+    enabled: true,
+    measurementNoiseStd: 0.115,
+    measurementBias: 0.007,
+    seed: 7319,
+    processPositionVariance: 3e-5,
+    processVelocityVariance: 4e-4,
+  },
 };
-const encoded = serializeExperiment(source, { name: 'roundtrip', presetId: 'safety-envelope', notes: 'regression' });
+const encoded = serializeExperiment(source, { name: 'roundtrip', presetId: 'noisy-estimation', notes: 'regression' });
 const restored = parseExperimentPayload(encoded);
 
-assert(restored.presetId === 'safety-envelope', 'Preset metadata did not survive serialization.');
+assert(restored.presetId === 'noisy-estimation', 'Preset metadata did not survive serialization.');
 assert(restored.config.mpc.stateConstraintsEnabled === true, 'State constraint flag did not survive serialization.');
 assert(restored.config.mpc.outputConstraintsEnabled === true, 'Output constraint flag did not survive serialization.');
 assert(restored.config.mpc.velocityMax === source.mpc.velocityMax, 'Velocity envelope changed during roundtrip.');
@@ -31,5 +40,11 @@ assert(restored.config.safety.previewHorizon === source.safety.previewHorizon, '
 assert(restored.config.safety.positionMargin === source.safety.positionMargin, 'Governor position margin changed during roundtrip.');
 assert(restored.config.safety.velocityMargin === source.safety.velocityMargin, 'Governor velocity margin changed during roundtrip.');
 assert(restored.config.safety.outputMargin === source.safety.outputMargin, 'Governor output margin changed during roundtrip.');
+assert(restored.config.estimation.enabled === true, 'Estimation enabled flag did not survive serialization.');
+assert(restored.config.estimation.measurementNoiseStd === source.estimation.measurementNoiseStd, 'Measurement noise changed during roundtrip.');
+assert(restored.config.estimation.measurementBias === source.estimation.measurementBias, 'Measurement bias changed during roundtrip.');
+assert(restored.config.estimation.seed === source.estimation.seed, 'Estimation seed changed during roundtrip.');
+assert(restored.config.estimation.processPositionVariance === source.estimation.processPositionVariance, 'Position process variance changed during roundtrip.');
+assert(restored.config.estimation.processVelocityVariance === source.estimation.processVelocityVariance, 'Velocity process variance changed during roundtrip.');
 
 console.log('Experiment serialization roundtrip PASS');
