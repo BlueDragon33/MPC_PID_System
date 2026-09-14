@@ -24,6 +24,8 @@ const source = {
     seed: 7319,
     processPositionVariance: 3e-5,
     processVelocityVariance: 4e-4,
+    constraintTighteningEnabled: true,
+    constraintSigma: 2.5,
   },
 };
 const encoded = serializeExperiment(source, { name: 'roundtrip', presetId: 'noisy-estimation', notes: 'regression' });
@@ -46,5 +48,7 @@ assert(restored.config.estimation.measurementBias === source.estimation.measurem
 assert(restored.config.estimation.seed === source.estimation.seed, 'Estimation seed changed during roundtrip.');
 assert(restored.config.estimation.processPositionVariance === source.estimation.processPositionVariance, 'Position process variance changed during roundtrip.');
 assert(restored.config.estimation.processVelocityVariance === source.estimation.processVelocityVariance, 'Velocity process variance changed during roundtrip.');
+assert(restored.config.estimation.constraintTighteningEnabled === true, 'Constraint-tightening flag did not survive serialization.');
+assert(restored.config.estimation.constraintSigma === source.estimation.constraintSigma, 'Constraint sigma changed during roundtrip.');
 
 console.log('Experiment serialization roundtrip PASS');
