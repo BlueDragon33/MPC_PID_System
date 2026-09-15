@@ -25,6 +25,41 @@ function boundedBlend(from, to, maxRelativeStep) {
   return out;
 }
 
+function determinant3(M) {
+  return M[0][0] * (M[1][1] * M[2][2] - M[1][2] * M[2][1])
+    - M[0][1] * (M[1][0] * M[2][2] - M[1][2] * M[2][0])
+    + M[0][2] * (M[1][0] * M[2][1] - M[1][1] * M[2][0]);
+}
+
+function informationQuality(regressors) {
+  const G = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+  if (!regressors.length) {
+    return { normalizedDeterminant: 0, determinant: 0, trace: 0, matrix: G };
+  }
+
+  for (const phi of regressors) {
+    for (let i = 0; i < 3; i += 1) {
+      for (let j = 0; j < 3; j += 1) G[i][j] += phi[i] * phi[j];
+    }
+  }
+  for (let i = 0; i < 3; i += 1) {
+    for (let j = 0; j < 3; j += 1) G[i][j] /= regressors.length;
+  }
+
+  const trace = G[0][0] + G[1][1] + G[2][2];
+  const determinant = Math.max(0, determinant3(G));
+  const isotropicDeterminant = (trace / 3) ** 3;
+  const normalizedDeterminant = isotropicDeterminant > 1e-18
+    ? clamp(determinant / isotropicDeterminant, 0, 1)
+    : 0;
+  return {
+    normalizedDeterminant,
+    determinant,
+    trace,
+    matrix: G.map((row) => [...row]),
+  };
+}
+
 export function createAdaptiveModelSupervisor({
   dt,
   nominalParameters,
@@ -40,6 +75,8 @@ export function createAdaptiveModelSupervisor({
     gainMax: 2,
   },
   minExcitation = 0.08,
+  excitationHistorySize = 30,
+  minInformationRatio = 0,
   minUpdatesBeforePublish = 80,
   publishEveryUpdates = 20,
   maxCovarianceTrace = 5,
@@ -48,6 +85,8 @@ export function createAdaptiveModelSupervisor({
   if (!Number.isFinite(dt) || dt <= 0) throw new Error('Adaptive model supervisor requires dt > 0.');
   const nominal = cloneParameters(nominalParameters);
   const W = Math.max(1, Math.round(windowSize));
+  const informationWindow = Math.max(3, Math.round(excitationHistorySize));
+  const informationThreshold = Math.max(0, finite(minInformationRatio, 0));
   const rls = createRecursiveLeastSquaresPlantEstimator({
     dt,
     initialParameters: nominal,
@@ -59,11 +98,15 @@ export function createAdaptiveModelSupervisor({
   let published = { ...nominal };
   let candidate = { ...nominal };
   let buffer = [];
+  let regressorHistory = [];
   let acceptedWindows = 0;
   let rejectedLowExcitation = 0;
+  let rejectedInformationFilling = 0;
+  let rejectedLowInformation = 0;
   let publishCount = 0;
   let lastPublishUpdate = 0;
   let lastWindow = null;
+  let lastInformation = informationQuality([]);
 
   function considerPublish() {
     const diagnostics = rls.getDiagnostics();
@@ -109,13 +152,49 @@ export function createAdaptiveModelSupervisor({
     const excitation = Math.sqrt(regressor.reduce((sum, value) => sum + value * value, 0));
     buffer = [];
 
-    lastWindow = { avgX, avgV, avgU, target, excitation };
+    regressorHistory.push([...regressor]);
+    if (regressorHistory.length > informationWindow) regressorHistory.shift();
+    lastInformation = informationQuality(regressorHistory);
+    lastWindow = {
+      avgX,
+      avgV,
+      avgU,
+      target,
+      excitation,
+      informationRatio: lastInformation.normalizedDeterminant,
+    };
+
     if (excitation < minExcitation) {
       rejectedLowExcitation += 1;
       return {
         updated: false,
         reason: 'low-excitation',
         excitation,
+        informationRatio: lastInformation.normalizedDeterminant,
+        candidate: { ...candidate },
+        publishedModel: { ...published },
+      };
+    }
+
+    if (informationThreshold > 0 && regressorHistory.length < informationWindow) {
+      rejectedInformationFilling += 1;
+      return {
+        updated: false,
+        reason: 'information-history-filling',
+        excitation,
+        informationRatio: lastInformation.normalizedDeterminant,
+        candidate: { ...candidate },
+        publishedModel: { ...published },
+      };
+    }
+
+    if (informationThreshold > 0 && lastInformation.normalizedDeterminant < informationThreshold) {
+      rejectedLowInformation += 1;
+      return {
+        updated: false,
+        reason: 'low-persistent-excitation',
+        excitation,
+        informationRatio: lastInformation.normalizedDeterminant,
         candidate: { ...candidate },
         publishedModel: { ...published },
       };
@@ -124,7 +203,12 @@ export function createAdaptiveModelSupervisor({
     const updateResult = rls.updateRegression({
       regressor,
       target,
-      context: { aggregationWindow: W, excitation, shadowMode: true },
+      context: {
+        aggregationWindow: W,
+        excitation,
+        informationRatio: lastInformation.normalizedDeterminant,
+        shadowMode: true,
+      },
     });
     candidate = cloneParameters(updateResult.parameters);
     acceptedWindows += 1;
@@ -133,6 +217,7 @@ export function createAdaptiveModelSupervisor({
       updated: true,
       reason: publish.published ? 'published-shadow-model' : 'identified-shadow-candidate',
       excitation,
+      informationRatio: lastInformation.normalizedDeterminant,
       candidate: { ...candidate },
       publishedModel: { ...published },
       publish,
@@ -153,8 +238,12 @@ export function createAdaptiveModelSupervisor({
       return {
         shadowMode: true,
         windowSize: W,
+        excitationHistorySize: informationWindow,
+        minInformationRatio: informationThreshold,
         acceptedWindows,
         rejectedLowExcitation,
+        rejectedInformationFilling,
+        rejectedLowInformation,
         publishCount,
         lastPublishUpdate,
         candidate: { ...candidate },
@@ -165,6 +254,12 @@ export function createAdaptiveModelSupervisor({
           gain: relativeStep(published, candidate, 'gain'),
         },
         lastWindow: lastWindow ? { ...lastWindow } : null,
+        information: {
+          normalizedDeterminant: lastInformation.normalizedDeterminant,
+          determinant: lastInformation.determinant,
+          trace: lastInformation.trace,
+          matrix: lastInformation.matrix.map((row) => [...row]),
+        },
         rls: rlsDiagnostics,
       };
     },
@@ -173,11 +268,15 @@ export function createAdaptiveModelSupervisor({
       published = { ...nominal };
       candidate = { ...nominal };
       buffer = [];
+      regressorHistory = [];
       acceptedWindows = 0;
       rejectedLowExcitation = 0;
+      rejectedInformationFilling = 0;
+      rejectedLowInformation = 0;
       publishCount = 0;
       lastPublishUpdate = 0;
       lastWindow = null;
+      lastInformation = informationQuality([]);
     },
   };
 }
