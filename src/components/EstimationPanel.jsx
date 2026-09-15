@@ -55,8 +55,9 @@ export default function EstimationPanel({ cfg, setCfg }) {
             <NumberField label="Q disturbance" value={estimation.disturbanceProcessVariance} step={0.001} min={0} onChange={(value) => update('disturbanceProcessVariance', Math.max(0, value))} />
             <NumberField label="Initial P disturbance" value={estimation.initialDisturbanceVariance} step={0.05} min={0} onChange={(value) => update('initialDisturbanceVariance', Math.max(0, value))} />
             <NumberField label="Disturbance retention ρd" value={estimation.disturbanceRetention ?? 1} step={0.01} min={0} max={1} onChange={(value) => update('disturbanceRetention', Math.max(0, Math.min(1, value)))} />
+            <ToggleField label="d̂-aware Event Monitor" checked={Boolean(estimation.disturbancePredictionEnabled)} onChange={(value) => update('disturbancePredictionEnabled', value)} />
           </>}
-          <p className="estimation-note">d̂ dùng mô hình d[k+1]=ρd·d[k]+w. ρd nhỏ hơn 1 giúp residual cũ phai dần; d̂ hiện vẫn chỉ được quan sát, chưa feed-forward vào MPC prediction.</p>
+          <p className="estimation-note">d̂ dùng mô hình d[k+1]=ρd·d[k]+w. Khi bật d̂-aware Event Monitor, one-step prediction dùng Ax+Bu+E·d̂ để tránh trigger thừa do model residual. MPC horizon compensation vẫn là gate riêng.</p>
         </div>
 
         <div className="estimation-subsection">
