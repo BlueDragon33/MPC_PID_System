@@ -185,7 +185,7 @@ export const EXPERIMENT_PRESETS = [
   {
     id: 'mismatch-observer',
     label: 'Model mismatch · d̂ observer',
-    description: 'Same truth/model mismatch with a retention-tuned augmented disturbance state; d̂ remains observer-only until prediction compensation is benchmarked.',
+    description: 'Same truth/model mismatch with a retention-tuned augmented disturbance state; d̂ now compensates the Event Monitor prediction while MPC horizon compensation remains separately gated.',
     patch: {
       truthPlant: {
         enabled: true,
@@ -207,6 +207,7 @@ export const EXPERIMENT_PRESETS = [
         disturbanceProcessVariance: 8e-3,
         initialDisturbanceVariance: 0.2,
         disturbanceRetention: 0.90,
+        disturbancePredictionEnabled: true,
       },
       safety: { previewHorizon: 8, positionMargin: 0.01, velocityMargin: 0.02, outputMargin: 0.01 },
       mpc: {
