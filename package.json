@@ -8,7 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "smoke": "node scripts/smoke.mjs && node scripts/experimentRoundtrip.mjs && node scripts/estimationSmoke.mjs && node scripts/closedLoopEstimationSmoke.mjs && node scripts/uncertaintyTighteningSmoke.mjs && node scripts/estimatedSafetySmoke.mjs && node scripts/disturbanceEstimationSmoke.mjs && node scripts/modelMismatchObserverSmoke.mjs && node scripts/disturbancePredictionMonitorSmoke.mjs && node scripts/affineDisturbanceQPSmoke.mjs && node scripts/mpcDisturbanceCompensationProbe.mjs && node scripts/disturbanceCompensationMatrix.mjs && node scripts/parameterIdentificationSmoke.mjs",
-    "benchmark": "node scripts/benchmark.mjs && node scripts/estimatedStateParameterIdentificationProbe.mjs",
+    "benchmark": "node scripts/benchmark.mjs && node scripts/estimatedStateParameterIdentificationProbe.mjs && node scripts/windowedEstimatedStateParameterIdentification.mjs",
     "sensitivity:disturbance": "node scripts/disturbanceObserverSensitivity.mjs"
   },
   "dependencies": {
