@@ -69,17 +69,16 @@ export function createRecursiveLeastSquaresPlantEstimator({
   let residualSqSum = 0;
   let lastDiagnostics = null;
 
-  function update({ previousState, nextState, u, disturbanceEstimate = 0 }) {
-    const x = finite(previousState?.x);
-    const v = finite(previousState?.v);
-    const nextV = finite(nextState?.v, v);
-    const command = finite(u);
-    const disturbance = finite(disturbanceEstimate);
-    const phi = [-x, -v, command];
+  function updateRegression({ regressor, target, context = {} }) {
+    const phi = [
+      finite(regressor?.[0]),
+      finite(regressor?.[1]),
+      finite(regressor?.[2]),
+    ];
+    const measuredTarget = finite(target);
     const regressorNormSq = dot(phi, phi);
-    const measuredAccelerationWithoutDisturbance = (nextV - v) / sampleTime - disturbance;
     const prediction = dot(phi, theta);
-    const residual = measuredAccelerationWithoutDisturbance - prediction;
+    const residual = measuredTarget - prediction;
 
     if (regressorNormSq < minimumRegressorNorm * minimumRegressorNorm) {
       skippedUpdates += 1;
@@ -87,9 +86,12 @@ export function createRecursiveLeastSquaresPlantEstimator({
         updated: false,
         residual,
         regressorNorm: Math.sqrt(regressorNormSq),
-        measuredAccelerationWithoutDisturbance,
+        measuredTarget,
         prediction,
         forgettingFactor: lambda,
+        updates,
+        skippedUpdates,
+        ...context,
       };
       return { parameters: getParameters(), covariance: getCovariance(), diagnostics: { ...lastDiagnostics } };
     }
@@ -115,13 +117,14 @@ export function createRecursiveLeastSquaresPlantEstimator({
       residual,
       residualRmse: Math.sqrt(residualSqSum / updates),
       regressorNorm: Math.sqrt(regressorNormSq),
-      measuredAccelerationWithoutDisturbance,
+      measuredTarget,
       prediction,
       gainVector: [...K],
       covarianceTrace: P[0][0] + P[1][1] + P[2][2],
       forgettingFactor: lambda,
       updates,
       skippedUpdates,
+      ...context,
     };
 
     return {
@@ -129,6 +132,24 @@ export function createRecursiveLeastSquaresPlantEstimator({
       covariance: getCovariance(),
       diagnostics: { ...lastDiagnostics, gainVector: [...K] },
     };
+  }
+
+  function update({ previousState, nextState, u, disturbanceEstimate = 0 }) {
+    const x = finite(previousState?.x);
+    const v = finite(previousState?.v);
+    const nextV = finite(nextState?.v, v);
+    const command = finite(u);
+    const disturbance = finite(disturbanceEstimate);
+    const measuredAccelerationWithoutDisturbance = (nextV - v) / sampleTime - disturbance;
+    return updateRegression({
+      regressor: [-x, -v, command],
+      target: measuredAccelerationWithoutDisturbance,
+      context: {
+        measuredAccelerationWithoutDisturbance,
+        disturbanceEstimate: disturbance,
+        aggregationWindow: 1,
+      },
+    });
   }
 
   function getParameters() {
@@ -154,6 +175,7 @@ export function createRecursiveLeastSquaresPlantEstimator({
 
   return {
     update,
+    updateRegression,
     getParameters,
     getCovariance,
     getDiagnostics() {
