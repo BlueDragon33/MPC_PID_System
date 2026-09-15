@@ -82,8 +82,8 @@ function shiftedWarmStart(warmStart, horizon, previousU) {
 
 export function solveBoxQPMPC(state, target, previousU, cfg, warmStart = null) {
   const started = now();
-  const { A, B } = createSecondOrderModel(cfg);
-  const qp = buildCondensedQP({ A, B, state, target, previousU, cfg });
+  const { A, B, E } = createSecondOrderModel(cfg);
+  const qp = buildCondensedQP({ A, B, E, state, target, previousU, cfg });
   const horizon = cfg.mpc.horizon;
   const maxIterations = Math.max(1, Math.round(cfg.mpc.qpIterations ?? 120));
   const tolerance = Math.max(1e-12, cfg.mpc.qpTolerance ?? 1e-5);
@@ -154,6 +154,7 @@ export function solveBoxQPMPC(state, target, previousU, cfg, warmStart = null) {
       stepSize: step,
       restarts,
       objectiveImprovement,
+      disturbanceCompensationEnabled: Boolean(qp.disturbanceCompensationEnabled),
       finite: Number.isFinite(previousObjective) && Number.isFinite(finalResidual) && Number.isFinite(feasibility),
     },
   };
