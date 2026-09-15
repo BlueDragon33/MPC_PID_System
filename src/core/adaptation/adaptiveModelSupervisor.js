@@ -33,9 +33,7 @@ function determinant3(M) {
 
 function informationQuality(regressors) {
   const G = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
-  if (!regressors.length) {
-    return { normalizedDeterminant: 0, determinant: 0, trace: 0, matrix: G };
-  }
+  if (!regressors.length) return { normalizedDeterminant: 0, determinant: 0, trace: 0, matrix: G };
 
   for (const phi of regressors) {
     for (let i = 0; i < 3; i += 1) {
@@ -52,12 +50,19 @@ function informationQuality(regressors) {
   const normalizedDeterminant = isotropicDeterminant > 1e-18
     ? clamp(determinant / isotropicDeterminant, 0, 1)
     : 0;
-  return {
-    normalizedDeterminant,
-    determinant,
-    trace,
-    matrix: G.map((row) => [...row]),
-  };
+  return { normalizedDeterminant, determinant, trace, matrix: G.map((row) => [...row]) };
+}
+
+function predictionRmse(parameters, samples) {
+  if (!samples.length) return null;
+  const squared = samples.map(({ regressor, target }) => {
+    const predicted = regressor[0] * parameters.stiffness
+      + regressor[1] * parameters.damping
+      + regressor[2] * parameters.gain;
+    const error = target - predicted;
+    return error * error;
+  });
+  return Math.sqrt(squared.reduce((sum, value) => sum + value, 0) / squared.length);
 }
 
 export function createAdaptiveModelSupervisor({
@@ -77,6 +82,10 @@ export function createAdaptiveModelSupervisor({
   minExcitation = 0.08,
   excitationHistorySize = 30,
   minInformationRatio = 0,
+  validationStride = 0,
+  validationBufferSize = 30,
+  minValidationSamples = 10,
+  minValidationImprovement = 0,
   minUpdatesBeforePublish = 80,
   publishEveryUpdates = 20,
   maxCovarianceTrace = 5,
@@ -87,6 +96,11 @@ export function createAdaptiveModelSupervisor({
   const W = Math.max(1, Math.round(windowSize));
   const informationWindow = Math.max(3, Math.round(excitationHistorySize));
   const informationThreshold = Math.max(0, finite(minInformationRatio, 0));
+  const holdoutStride = Math.max(0, Math.round(validationStride));
+  const validationCapacity = Math.max(1, Math.round(validationBufferSize));
+  const validationMinimum = Math.max(1, Math.round(minValidationSamples));
+  const requiredValidationImprovement = clamp(finite(minValidationImprovement, 0), 0, 0.95);
+  const validationEnabled = holdoutStride >= 2;
   const rls = createRecursiveLeastSquaresPlantEstimator({
     dt,
     initialParameters: nominal,
@@ -99,14 +113,59 @@ export function createAdaptiveModelSupervisor({
   let candidate = { ...nominal };
   let buffer = [];
   let regressorHistory = [];
+  let validationBuffer = [];
+  let completedWindows = 0;
+  let validationWindows = 0;
   let acceptedWindows = 0;
   let rejectedLowExcitation = 0;
   let rejectedInformationFilling = 0;
   let rejectedLowInformation = 0;
+  let rejectedValidation = 0;
   let publishCount = 0;
   let lastPublishUpdate = 0;
   let lastWindow = null;
   let lastInformation = informationQuality([]);
+  let lastValidation = {
+    enabled: validationEnabled,
+    samples: 0,
+    candidateRmse: null,
+    publishedRmse: null,
+    improvementRatio: null,
+    ready: !validationEnabled,
+    passed: !validationEnabled,
+  };
+
+  function evaluateValidation() {
+    if (!validationEnabled) {
+      return {
+        enabled: false,
+        samples: validationBuffer.length,
+        candidateRmse: null,
+        publishedRmse: null,
+        improvementRatio: null,
+        ready: true,
+        passed: true,
+      };
+    }
+    const candidateRmse = predictionRmse(candidate, validationBuffer);
+    const publishedRmse = predictionRmse(published, validationBuffer);
+    const ready = validationBuffer.length >= validationMinimum
+      && Number.isFinite(candidateRmse)
+      && Number.isFinite(publishedRmse);
+    const improvementRatio = ready && publishedRmse > 1e-12
+      ? 1 - candidateRmse / publishedRmse
+      : null;
+    const passed = ready && candidateRmse <= publishedRmse * (1 - requiredValidationImprovement);
+    return {
+      enabled: true,
+      samples: validationBuffer.length,
+      candidateRmse,
+      publishedRmse,
+      improvementRatio,
+      ready,
+      passed,
+    };
+  }
 
   function considerPublish() {
     const diagnostics = rls.getDiagnostics();
@@ -115,8 +174,20 @@ export function createAdaptiveModelSupervisor({
     const enoughData = updates >= minUpdatesBeforePublish;
     const cadenceReady = updates - lastPublishUpdate >= publishEveryUpdates;
     const confidenceReady = covarianceTrace <= maxCovarianceTrace;
-    if (!enoughData || !cadenceReady || !confidenceReady) {
-      return { published: false, enoughData, cadenceReady, confidenceReady };
+    lastValidation = evaluateValidation();
+    const validationReady = lastValidation.ready;
+    const validationPassed = lastValidation.passed;
+    if (!enoughData || !cadenceReady || !confidenceReady || !validationReady || !validationPassed) {
+      if (validationEnabled && validationReady && !validationPassed) rejectedValidation += 1;
+      return {
+        published: false,
+        enoughData,
+        cadenceReady,
+        confidenceReady,
+        validationReady,
+        validationPassed,
+        validation: { ...lastValidation },
+      };
     }
 
     const next = boundedBlend(published, candidate, maxRelativePublishStep);
@@ -124,20 +195,23 @@ export function createAdaptiveModelSupervisor({
     if (moved) {
       published = next;
       publishCount += 1;
+      lastValidation = evaluateValidation();
     }
     lastPublishUpdate = updates;
-    return { published: moved, enoughData, cadenceReady, confidenceReady };
+    return {
+      published: moved,
+      enoughData,
+      cadenceReady,
+      confidenceReady,
+      validationReady,
+      validationPassed,
+      validation: { ...lastValidation },
+    };
   }
 
   function update({ previousState, nextState, u }) {
-    const previous = {
-      x: finite(previousState?.x, 0),
-      v: finite(previousState?.v, 0),
-    };
-    const next = {
-      x: finite(nextState?.x, previous.x),
-      v: finite(nextState?.v, previous.v),
-    };
+    const previous = { x: finite(previousState?.x, 0), v: finite(previousState?.v, 0) };
+    const next = { x: finite(nextState?.x, previous.x), v: finite(nextState?.v, previous.v) };
     const input = finite(u, 0);
     buffer.push({ state: previous, nextState: next, u: input });
     if (buffer.length < W) {
@@ -151,6 +225,32 @@ export function createAdaptiveModelSupervisor({
     const regressor = [-avgX, -avgV, avgU];
     const excitation = Math.sqrt(regressor.reduce((sum, value) => sum + value * value, 0));
     buffer = [];
+    completedWindows += 1;
+
+    const holdoutWindow = validationEnabled && completedWindows % holdoutStride === 0;
+    if (holdoutWindow) {
+      validationBuffer.push({ regressor: [...regressor], target });
+      if (validationBuffer.length > validationCapacity) validationBuffer.shift();
+      validationWindows += 1;
+      lastValidation = evaluateValidation();
+      lastWindow = {
+        avgX,
+        avgV,
+        avgU,
+        target,
+        excitation,
+        informationRatio: lastInformation.normalizedDeterminant,
+        holdout: true,
+      };
+      return {
+        updated: false,
+        reason: 'validation-holdout',
+        excitation,
+        validation: { ...lastValidation },
+        candidate: { ...candidate },
+        publishedModel: { ...published },
+      };
+    }
 
     regressorHistory.push([...regressor]);
     if (regressorHistory.length > informationWindow) regressorHistory.shift();
@@ -162,6 +262,7 @@ export function createAdaptiveModelSupervisor({
       target,
       excitation,
       informationRatio: lastInformation.normalizedDeterminant,
+      holdout: false,
     };
 
     if (excitation < minExcitation) {
@@ -227,23 +328,28 @@ export function createAdaptiveModelSupervisor({
 
   return {
     update,
-    getCandidate() {
-      return { ...candidate };
-    },
-    getPublishedModel() {
-      return { ...published };
-    },
+    getCandidate() { return { ...candidate }; },
+    getPublishedModel() { return { ...published }; },
     getDiagnostics() {
       const rlsDiagnostics = rls.getDiagnostics();
+      lastValidation = evaluateValidation();
       return {
         shadowMode: true,
         windowSize: W,
         excitationHistorySize: informationWindow,
         minInformationRatio: informationThreshold,
+        validationEnabled,
+        validationStride: holdoutStride,
+        validationBufferSize: validationCapacity,
+        minValidationSamples: validationMinimum,
+        minValidationImprovement: requiredValidationImprovement,
+        completedWindows,
+        validationWindows,
         acceptedWindows,
         rejectedLowExcitation,
         rejectedInformationFilling,
         rejectedLowInformation,
+        rejectedValidation,
         publishCount,
         lastPublishUpdate,
         candidate: { ...candidate },
@@ -260,6 +366,7 @@ export function createAdaptiveModelSupervisor({
           trace: lastInformation.trace,
           matrix: lastInformation.matrix.map((row) => [...row]),
         },
+        validation: { ...lastValidation },
         rls: rlsDiagnostics,
       };
     },
@@ -269,14 +376,27 @@ export function createAdaptiveModelSupervisor({
       candidate = { ...nominal };
       buffer = [];
       regressorHistory = [];
+      validationBuffer = [];
+      completedWindows = 0;
+      validationWindows = 0;
       acceptedWindows = 0;
       rejectedLowExcitation = 0;
       rejectedInformationFilling = 0;
       rejectedLowInformation = 0;
+      rejectedValidation = 0;
       publishCount = 0;
       lastPublishUpdate = 0;
       lastWindow = null;
       lastInformation = informationQuality([]);
+      lastValidation = {
+        enabled: validationEnabled,
+        samples: 0,
+        candidateRmse: null,
+        publishedRmse: null,
+        improvementRatio: null,
+        ready: !validationEnabled,
+        passed: !validationEnabled,
+      };
     },
   };
 }
