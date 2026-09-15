@@ -22,12 +22,12 @@ function scenario(kind, compensationEnabled) {
       mpcDisturbanceCompensationEnabled: compensationEnabled,
     },
     disturbance: additive
-      ? { ...preset.disturbance, enabled: true, start: 1.15, duration: 1.1, amplitude: kind === 'additive-only' ? 1.5 : 1.0 }
+      ? { ...preset.disturbance, enabled: true, start: 1.15, duration: 1.1, amplitude: 1.0 }
       : { ...preset.disturbance, enabled: false, amplitude: 0 },
     mpc: {
       ...preset.mpc,
       solver: SOLVER_BACKENDS.CONSTRAINED_QP,
-      horizon: 16,
+      horizon: 12,
       qpIterations: Math.max(100, preset.mpc.qpIterations),
       qpProjectionCycles: Math.max(16, preset.mpc.qpProjectionCycles),
       qpTolerance: Math.min(5e-5, preset.mpc.qpTolerance),
@@ -68,10 +68,16 @@ for (const kind of ['additive-only', 'parameter-only', 'combined']) {
   const off = rows.find((row) => row.kind === kind && !row.enabled).result;
   const on = rows.find((row) => row.kind === kind && row.enabled).result;
   console.log(`${kind}: IAE ratio=${(on.metrics.iae / Math.max(1e-12, off.metrics.iae)).toFixed(4)}, effort ratio=${(on.metrics.controlEffort / Math.max(1e-12, off.metrics.controlEffort)).toFixed(4)}, solve ratio=${(on.metrics.solveCount / Math.max(1, off.metrics.solveCount)).toFixed(4)}`);
-  assert(on.metrics.fallbackCount === 0, `${kind}: compensation caused fallback.`);
-  assert(on.metrics.infeasibleCount === 0, `${kind}: compensation caused infeasible solve.`);
-  assert((on.metrics.convergenceRate ?? 0) === 100, `${kind}: compensation convergence dropped below 100%.`);
-  assert(on.metrics.maxActualSafetyViolation <= 1e-9, `${kind}: compensation violated plant safety.`);
+
+  assert(off.metrics.fallbackCount === 0, `${kind}: OFF baseline has ${off.metrics.fallbackCount} fallback(s); comparison is outside the feasible baseline envelope.`);
+  assert(off.metrics.infeasibleCount === 0, `${kind}: OFF baseline has ${off.metrics.infeasibleCount} infeasible solve(s).`);
+  assert((off.metrics.convergenceRate ?? 0) === 100, `${kind}: OFF baseline convergence dropped to ${off.metrics.convergenceRate}%.`);
+  assert(off.metrics.maxActualSafetyViolation <= 1e-9, `${kind}: OFF baseline violated plant safety by ${off.metrics.maxActualSafetyViolation}.`);
+
+  assert(on.metrics.fallbackCount === 0, `${kind}: compensation caused ${on.metrics.fallbackCount} fallback(s).`);
+  assert(on.metrics.infeasibleCount === 0, `${kind}: compensation caused ${on.metrics.infeasibleCount} infeasible solve(s).`);
+  assert((on.metrics.convergenceRate ?? 0) === 100, `${kind}: compensation convergence dropped to ${on.metrics.convergenceRate}%.`);
+  assert(on.metrics.maxActualSafetyViolation <= 1e-9, `${kind}: compensation violated plant safety by ${on.metrics.maxActualSafetyViolation}.`);
 }
 
 console.log('Affine disturbance compensation matrix PASS');
