@@ -6,6 +6,7 @@ import {
 
 const zeros = (rows, cols) => Array.from({ length: rows }, () => new Array(cols).fill(0));
 const identity = (n) => Array.from({ length: n }, (_, i) => Array.from({ length: n }, (_, j) => (i === j ? 1 : 0)));
+const clamp = (value, lower, upper) => Math.max(lower, Math.min(upper, value));
 
 function transpose(A) {
   return A[0].map((_, j) => A.map((row) => row[j]));
@@ -109,7 +110,28 @@ export function buildPredictionMatrices(A, B, horizon) {
   return { Phi, Gamma };
 }
 
-export function buildCondensedQP({ A, B, C = [1, 0], state, target, previousU, cfg }) {
+export function buildAffineDisturbanceOffset(A, E, horizon, disturbanceEstimate = 0, retention = 1) {
+  const n = A.length;
+  const offset = new Array(horizon * n).fill(0);
+  const powers = matrixPowers(A, horizon);
+  const Ecol = vectorAsColumn(E);
+  const d0 = Number.isFinite(disturbanceEstimate) ? disturbanceEstimate : 0;
+  const rho = clamp(Number.isFinite(retention) ? retention : 1, 0, 1);
+
+  for (let k = 1; k <= horizon; k += 1) {
+    const stage = new Array(n).fill(0);
+    for (let j = 0; j < k; j += 1) {
+      const disturbance = d0 * (rho ** j);
+      const influence = matMul(powers[k - 1 - j], Ecol);
+      for (let i = 0; i < n; i += 1) stage[i] += influence[i][0] * disturbance;
+    }
+    for (let i = 0; i < n; i += 1) offset[(k - 1) * n + i] = stage[i];
+  }
+
+  return offset;
+}
+
+export function buildCondensedQP({ A, B, E = [0, 0], C = [1, 0], state, target, previousU, cfg }) {
   const N = cfg.mpc.horizon;
   const { Phi, Gamma } = buildPredictionMatrices(A, B, N);
   const Qbar = blockDiagonalStateCost(N, cfg);
@@ -119,7 +141,18 @@ export function buildCondensedQP({ A, B, C = [1, 0], state, target, previousU, c
   const GammaT = transpose(Gamma);
 
   const x0 = [state.x, state.v];
-  const freePrediction = matVec(Phi, x0);
+  const nominalFreePrediction = matVec(Phi, x0);
+  const disturbanceCompensationEnabled = Boolean(cfg.estimation?.mpcDisturbanceCompensationEnabled);
+  const disturbanceOffset = disturbanceCompensationEnabled
+    ? buildAffineDisturbanceOffset(
+        A,
+        E,
+        N,
+        cfg.runtime?.disturbanceEstimate ?? 0,
+        cfg.runtime?.disturbanceRetention ?? cfg.estimation?.disturbanceRetention ?? 1,
+      )
+    : new Array(N * A.length).fill(0);
+  const freePrediction = addVectors(nominalFreePrediction, disturbanceOffset);
   const reference = Array.from({ length: N }, () => [target, 0]).flat();
   const stateOffset = freePrediction.map((value, i) => value - reference[i]);
 
@@ -174,7 +207,10 @@ export function buildCondensedQP({ A, B, C = [1, 0], state, target, previousU, c
     Rbar,
     D,
     reference,
+    nominalFreePrediction,
+    disturbanceOffset,
     freePrediction,
+    disturbanceCompensationEnabled,
     form: '0.5 * U^T H U + f^T U, subject to A * U <= b',
   };
 }
@@ -208,6 +244,7 @@ export function qpDiagnostics(qp) {
     outputConstraintsEnabled: qp.inequalities.outputConstraintsEnabled,
     stateConstraintCount: qp.inequalities.stateConstraintCount || 0,
     outputConstraintCount: qp.inequalities.outputConstraintCount || 0,
+    disturbanceCompensationEnabled: Boolean(qp.disturbanceCompensationEnabled),
     maxSymmetryError,
     minDiagonal,
     finite: finite && constraintFinite,
