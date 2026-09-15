@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "smoke": "node scripts/smoke.mjs && node scripts/experimentRoundtrip.mjs && node scripts/estimationSmoke.mjs && node scripts/closedLoopEstimationSmoke.mjs && node scripts/uncertaintyTighteningSmoke.mjs && node scripts/estimatedSafetySmoke.mjs && node scripts/disturbanceEstimationSmoke.mjs && node scripts/modelMismatchObserverSmoke.mjs && node scripts/disturbancePredictionMonitorSmoke.mjs && node scripts/affineDisturbanceQPSmoke.mjs && node scripts/mpcDisturbanceCompensationProbe.mjs && node scripts/disturbanceCompensationMatrix.mjs && node scripts/parameterIdentificationSmoke.mjs",
+    "smoke": "node scripts/smoke.mjs && node scripts/experimentRoundtrip.mjs && node scripts/estimationSmoke.mjs && node scripts/closedLoopEstimationSmoke.mjs && node scripts/uncertaintyTighteningSmoke.mjs && node scripts/estimatedSafetySmoke.mjs && node scripts/disturbanceEstimationSmoke.mjs && node scripts/modelMismatchObserverSmoke.mjs && node scripts/disturbancePredictionMonitorSmoke.mjs && node scripts/affineDisturbanceQPSmoke.mjs && node scripts/mpcDisturbanceCompensationProbe.mjs && node scripts/disturbanceCompensationMatrix.mjs && node scripts/parameterIdentificationSmoke.mjs && node scripts/adaptiveModelSupervisorSmoke.mjs",
     "benchmark": "node scripts/benchmark.mjs && node scripts/estimatedStateParameterIdentificationProbe.mjs && node scripts/windowedEstimatedStateParameterIdentification.mjs && node scripts/slidingWindowEstimatedStateParameterIdentification.mjs && node scripts/instrumentalVariableParameterIdentification.mjs && node scripts/adaptiveModelShadowValidation.mjs",
     "sensitivity:disturbance": "node scripts/disturbanceObserverSensitivity.mjs"
   },
