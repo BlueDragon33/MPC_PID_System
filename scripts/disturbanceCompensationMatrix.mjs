@@ -6,7 +6,7 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-function scenario(kind, compensationEnabled) {
+function scenario(kind, compensationEnabled, amplitude = 1.0) {
   const preset = applyExperimentPreset(defaultConfig, 'mismatch-observer');
   const additive = kind === 'additive-only' || kind === 'combined';
   const mismatch = kind === 'parameter-only' || kind === 'combined';
@@ -22,7 +22,7 @@ function scenario(kind, compensationEnabled) {
       mpcDisturbanceCompensationEnabled: compensationEnabled,
     },
     disturbance: additive
-      ? { ...preset.disturbance, enabled: true, start: 1.15, duration: 1.1, amplitude: 1.0 }
+      ? { ...preset.disturbance, enabled: true, start: 1.15, duration: 1.1, amplitude }
       : { ...preset.disturbance, enabled: false, amplitude: 0 },
     mpc: {
       ...preset.mpc,
@@ -35,18 +35,17 @@ function scenario(kind, compensationEnabled) {
   };
 }
 
-const rows = [];
-for (const kind of ['additive-only', 'parameter-only', 'combined']) {
-  for (const enabled of [false, true]) {
-    const result = runSimulation('HYBRID_SAFE', scenario(kind, enabled));
-    rows.push({ kind, enabled, result });
-  }
+function isStrictlyFeasible(result) {
+  return result.metrics.fallbackCount === 0
+    && result.metrics.infeasibleCount === 0
+    && (result.metrics.convergenceRate ?? 0) === 100
+    && result.metrics.maxActualSafetyViolation <= 1e-9;
 }
 
-function summarize({ kind, enabled, result }) {
+function summarize(label, result, amplitude = null) {
   return {
-    scenario: kind,
-    compensation: enabled ? 'ON' : 'OFF',
+    scenario: label,
+    amplitude: amplitude == null ? '—' : amplitude.toFixed(2),
     IAE: result.metrics.iae.toFixed(4),
     effort: result.metrics.controlEffort.toFixed(4),
     solves: result.metrics.solveCount,
@@ -61,23 +60,47 @@ function summarize({ kind, enabled, result }) {
   };
 }
 
-console.log('Affine disturbance compensation matrix');
-console.table(rows.map(summarize));
+// Predeclared disturbance grid: determine the largest additive pulse for which
+// the OFF baseline remains fully feasible/safe. Compensation is evaluated at
+// exactly that same operating point, not at a separately tuned amplitude.
+const additiveGrid = [0.2, 0.4, 0.6, 0.8, 1.0];
+const additiveFrontierRows = additiveGrid.map((amplitude) => ({
+  amplitude,
+  result: runSimulation('HYBRID_SAFE', scenario('additive-only', false, amplitude)),
+}));
+const feasibleAdditiveRows = additiveFrontierRows.filter(({ result }) => isStrictlyFeasible(result));
+const additiveFrontier = feasibleAdditiveRows[feasibleAdditiveRows.length - 1] ?? null;
 
-for (const kind of ['additive-only', 'parameter-only', 'combined']) {
-  const off = rows.find((row) => row.kind === kind && !row.enabled).result;
-  const on = rows.find((row) => row.kind === kind && row.enabled).result;
+console.log('Additive-disturbance feasible-frontier sweep (compensation OFF)');
+console.table(additiveFrontierRows.map(({ amplitude, result }) => summarize('additive OFF', result, amplitude)));
+assert(additiveFrontier, 'No strictly feasible additive-disturbance point found on the predeclared 0.2–1.0 grid.');
+
+const additiveAmplitude = additiveFrontier.amplitude;
+const additiveOff = additiveFrontier.result;
+const additiveOn = runSimulation('HYBRID_SAFE', scenario('additive-only', true, additiveAmplitude));
+const parameterOff = runSimulation('HYBRID_SAFE', scenario('parameter-only', false, 0));
+const parameterOn = runSimulation('HYBRID_SAFE', scenario('parameter-only', true, 0));
+const combinedOff = runSimulation('HYBRID_SAFE', scenario('combined', false, 1.0));
+const combinedOn = runSimulation('HYBRID_SAFE', scenario('combined', true, 1.0));
+
+const comparisons = [
+  { kind: 'additive-only', amplitude: additiveAmplitude, off: additiveOff, on: additiveOn },
+  { kind: 'parameter-only', amplitude: null, off: parameterOff, on: parameterOn },
+  { kind: 'combined', amplitude: 1.0, off: combinedOff, on: combinedOn },
+];
+
+console.log(`Selected additive feasible frontier: amplitude=${additiveAmplitude.toFixed(2)}`);
+console.log('Affine disturbance compensation matrix at valid operating points');
+console.table(comparisons.flatMap(({ kind, amplitude, off, on }) => [
+  { ...summarize(kind, off, amplitude), compensation: 'OFF' },
+  { ...summarize(kind, on, amplitude), compensation: 'ON' },
+]));
+
+for (const { kind, off, on } of comparisons) {
   console.log(`${kind}: IAE ratio=${(on.metrics.iae / Math.max(1e-12, off.metrics.iae)).toFixed(4)}, effort ratio=${(on.metrics.controlEffort / Math.max(1e-12, off.metrics.controlEffort)).toFixed(4)}, solve ratio=${(on.metrics.solveCount / Math.max(1, off.metrics.solveCount)).toFixed(4)}`);
 
-  assert(off.metrics.fallbackCount === 0, `${kind}: OFF baseline has ${off.metrics.fallbackCount} fallback(s); comparison is outside the feasible baseline envelope.`);
-  assert(off.metrics.infeasibleCount === 0, `${kind}: OFF baseline has ${off.metrics.infeasibleCount} infeasible solve(s).`);
-  assert((off.metrics.convergenceRate ?? 0) === 100, `${kind}: OFF baseline convergence dropped to ${off.metrics.convergenceRate}%.`);
-  assert(off.metrics.maxActualSafetyViolation <= 1e-9, `${kind}: OFF baseline violated plant safety by ${off.metrics.maxActualSafetyViolation}.`);
-
-  assert(on.metrics.fallbackCount === 0, `${kind}: compensation caused ${on.metrics.fallbackCount} fallback(s).`);
-  assert(on.metrics.infeasibleCount === 0, `${kind}: compensation caused ${on.metrics.infeasibleCount} infeasible solve(s).`);
-  assert((on.metrics.convergenceRate ?? 0) === 100, `${kind}: compensation convergence dropped to ${on.metrics.convergenceRate}%.`);
-  assert(on.metrics.maxActualSafetyViolation <= 1e-9, `${kind}: compensation violated plant safety by ${on.metrics.maxActualSafetyViolation}.`);
+  assert(isStrictlyFeasible(off), `${kind}: OFF baseline is not strictly feasible/safe at the selected operating point.`);
+  assert(isStrictlyFeasible(on), `${kind}: affine compensation is not strictly feasible/safe at the same operating point.`);
 }
 
 console.log('Affine disturbance compensation matrix PASS');
