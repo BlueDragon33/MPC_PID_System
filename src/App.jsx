@@ -9,7 +9,6 @@ import {
   Cpu,
   Database,
   Gauge,
-  Github,
   Play,
   RotateCcw,
   Settings,
@@ -227,7 +226,7 @@ export default function App() {
         </nav>
         <div className="app-status">
           <span className={`status-pill status-${statusLabel(governed).toLowerCase()}`}><CircleDot size={11} />{statusLabel(governed)}</span>
-          <span className="repo-mark"><Github size={19} />MPC_PID_System</span>
+          <span className="repo-mark"><Cpu size={19} />MPC_PID_System</span>
         </div>
       </header>
 
