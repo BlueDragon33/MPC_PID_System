@@ -85,6 +85,7 @@ export const defaultConfig = {
     initialDisturbanceVariance: 0.8,
     disturbanceRetention: 1,
     disturbancePredictionEnabled: false,
+    mpcDisturbanceCompensationEnabled: false,
   },
   trigger: {
     predictionError: 0.035,
@@ -200,6 +201,7 @@ function metrics(samples, target, solverRecords, cfg) {
     .map((sample) => sample.disturbanceVariance)
     .filter(Number.isFinite);
   const predictionCompensatedSamples = samples.filter((sample) => sample.disturbancePredictionEnabled);
+  const mpcDisturbanceCompensatedSamples = samples.filter((sample) => sample.mpcDisturbanceCompensationEnabled);
 
   const tighteningSamples = samples.filter((sample) => sample.uncertaintyTighteningEnabled);
   const positionMargins = tighteningSamples.map((sample) => sample.uncertaintyPositionMargin).filter(Number.isFinite);
@@ -265,6 +267,7 @@ function metrics(samples, target, solverRecords, cfg) {
     avgDisturbanceVariance: average(disturbanceVariances),
     finalDisturbanceVariance: disturbanceVariances.length ? disturbanceVariances[disturbanceVariances.length - 1] : null,
     disturbancePredictionEnabled: predictionCompensatedSamples.length > 0,
+    mpcDisturbanceCompensationEnabled: mpcDisturbanceCompensatedSamples.length > 0,
     truthPlantMismatchEnabled: samples.some((sample) => sample.truthPlantMismatchEnabled),
     uncertaintyTighteningEnabled: tighteningSamples.length > 0,
     avgUncertaintyPositionMargin: average(positionMargins),
@@ -302,6 +305,7 @@ export function runSimulation(mode, userConfig = {}) {
   const estimationEnabled = Boolean(cfg.estimation.enabled);
   const disturbanceStateEnabled = Boolean(estimationEnabled && cfg.estimation.disturbanceStateEnabled);
   const disturbancePredictionEnabled = Boolean(disturbanceStateEnabled && cfg.estimation.disturbancePredictionEnabled);
+  const mpcDisturbanceCompensationEnabled = Boolean(disturbanceStateEnabled && cfg.estimation.mpcDisturbanceCompensationEnabled);
   const sensor = createMeasurementSensor({
     C: model.C,
     noiseStd: estimationEnabled ? cfg.estimation.measurementNoiseStd : 0,
@@ -409,6 +413,15 @@ export function runSimulation(mode, userConfig = {}) {
       model.C,
     );
     const predictionDisturbance = disturbancePredictionEnabled ? disturbanceEstimate : 0;
+    const solverCfg = mpcDisturbanceCompensationEnabled
+      ? {
+          ...controlCfg,
+          runtime: {
+            disturbanceEstimate,
+            disturbanceRetention: cfg.estimation.disturbanceRetention,
+          },
+        }
+      : controlCfg;
     const event = evaluateEventTrigger({
       k,
       t,
@@ -435,7 +448,7 @@ export function runSimulation(mode, userConfig = {}) {
     if (mode === 'PID') {
       u = pid.update(controlCfg.setpoint, controllerState.x);
     } else if (mode === 'MPC') {
-      const solution = solveMPC(controllerState, controlCfg.setpoint, previousU, controlCfg, warmStart);
+      const solution = solveMPC(controllerState, solverCfg.setpoint, previousU, solverCfg, warmStart);
       u = solution.u;
       warmStart = solution.sequence;
       acceptMpcPlan(solution);
@@ -448,10 +461,10 @@ export function runSimulation(mode, userConfig = {}) {
       triggerReason = 'periodic';
     } else if (hybridMode) {
       if (event.triggered) {
-        const solution = solveMPC(controllerState, controlCfg.setpoint, previousU, controlCfg, warmStart);
+        const solution = solveMPC(controllerState, solverCfg.setpoint, previousU, solverCfg, warmStart);
         warmStart = solution.sequence;
         if (!solution.fallbackUsed) {
-          reference = predictiveReference(solution, controlCfg.setpoint, controlCfg);
+          reference = predictiveReference(solution, solverCfg.setpoint, solverCfg);
           acceptMpcPlan(solution);
         }
         lastSolve = t;
@@ -541,6 +554,7 @@ export function runSimulation(mode, userConfig = {}) {
       disturbanceRetention: disturbanceStateEnabled ? cfg.estimation.disturbanceRetention : null,
       disturbancePredictionEnabled,
       predictionDisturbance,
+      mpcDisturbanceCompensationEnabled,
       innovation: estimationEnabled ? estimatorDiagnostics?.innovation ?? null : null,
       innovationVariance: estimationEnabled ? estimatorDiagnostics?.innovationVariance ?? null : null,
       covarianceTrace: estimationEnabled ? covarianceTrace : null,
