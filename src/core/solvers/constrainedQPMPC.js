@@ -105,6 +105,7 @@ function buildFailureResult({ qp, state, target, previousU, cfg, started, status
       projectionCycles: diagnostics.projectionCycles ?? 0,
       restarts: diagnostics.restarts ?? 0,
       finite: finiteVector(sequence),
+      disturbanceCompensationEnabled: Boolean(qp.disturbanceCompensationEnabled),
       fallbackActuatorFeasible: fallback.actuatorFeasible,
       fallbackAllConstraintsFeasible: fallback.allConstraintsFeasible,
       precheck: diagnostics.precheck ?? null,
@@ -114,8 +115,8 @@ function buildFailureResult({ qp, state, target, previousU, cfg, started, status
 
 export function solveConstrainedQPMPC(state, target, previousU, cfg, warmStart = null) {
   const started = now();
-  const { A, B, C } = createSecondOrderModel(cfg);
-  const qp = buildCondensedQP({ A, B, C, state, target, previousU, cfg });
+  const { A, B, E, C } = createSecondOrderModel(cfg);
+  const qp = buildCondensedQP({ A, B, E, C, state, target, previousU, cfg });
   const precheck = precheckInputRateFeasibility(qp.inequalities, previousU, cfg.mpc.uMin, cfg.mpc.uMax);
 
   if (!precheck.feasible) {
@@ -255,6 +256,7 @@ export function solveConstrainedQPMPC(state, target, previousU, cfg, warmStart =
       outputConstraintsEnabled: qp.inequalities.outputConstraintsEnabled,
       stateConstraintCount: qp.inequalities.stateConstraintCount || 0,
       outputConstraintCount: qp.inequalities.outputConstraintCount || 0,
+      disturbanceCompensationEnabled: Boolean(qp.disturbanceCompensationEnabled),
       lipschitzEstimate: lipschitz,
       stepSize: step,
       projectionCycles,
