@@ -37,6 +37,7 @@ const source = {
     disturbanceProcessVariance: 0.012,
     initialDisturbanceVariance: 0.65,
     disturbanceRetention: 0.91,
+    disturbancePredictionEnabled: true,
   },
 };
 const encoded = serializeExperiment(source, { name: 'roundtrip', presetId: 'mismatch-observer', notes: 'regression' });
@@ -69,5 +70,6 @@ assert(restored.config.estimation.disturbanceStateEnabled === true, 'Disturbance
 assert(restored.config.estimation.disturbanceProcessVariance === source.estimation.disturbanceProcessVariance, 'Disturbance process variance changed during roundtrip.');
 assert(restored.config.estimation.initialDisturbanceVariance === source.estimation.initialDisturbanceVariance, 'Initial disturbance variance changed during roundtrip.');
 assert(restored.config.estimation.disturbanceRetention === source.estimation.disturbanceRetention, 'Disturbance retention changed during roundtrip.');
+assert(restored.config.estimation.disturbancePredictionEnabled === true, 'Disturbance-aware Event Monitor setting did not survive serialization.');
 
 console.log('Experiment serialization roundtrip PASS');
