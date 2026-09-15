@@ -227,7 +227,15 @@ function mismatchBenchmarkConfig(presetId) {
 
 const mismatchStateOnly = runSimulation('HYBRID_SAFE', mismatchBenchmarkConfig('model-mismatch'));
 const mismatchObserverConfig = mismatchBenchmarkConfig('mismatch-observer');
-const mismatchDisturbanceObserver = runSimulation('HYBRID_SAFE', mismatchObserverConfig);
+const mismatchObserverOnlyConfig = {
+  ...mismatchObserverConfig,
+  estimation: {
+    ...mismatchObserverConfig.estimation,
+    disturbancePredictionEnabled: false,
+    mpcDisturbanceCompensationEnabled: false,
+  },
+};
+const mismatchDisturbanceObserver = runSimulation('HYBRID_SAFE', mismatchObserverOnlyConfig);
 
 console.log('\nModel-mismatch estimator benchmark');
 console.table([
@@ -268,6 +276,7 @@ const mismatchPredictionMonitor = runSimulation('HYBRID_SAFE', {
   estimation: {
     ...mismatchObserverConfig.estimation,
     disturbancePredictionEnabled: true,
+    mpcDisturbanceCompensationEnabled: false,
   },
 });
 
