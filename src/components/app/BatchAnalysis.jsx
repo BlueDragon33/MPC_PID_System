@@ -1,5 +1,6 @@
 import React from 'react';
 import { BarChart3, ShieldCheck } from 'lucide-react';
+import './batchAnalysis.css';
 
 const fmt = (value, digits = 2) => Number.isFinite(value) ? value.toFixed(digits) : '—';
 
