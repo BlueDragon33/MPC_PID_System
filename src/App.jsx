@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { BarChart3, BookOpen, CircleDot, Cpu, Database, Play, Settings } from 'lucide-react';
+import BatchAnalysis from './components/app/BatchAnalysis.jsx';
 import ControlSidebar from './components/app/ControlSidebar.jsx';
 import ExperimentMatrix from './components/app/ExperimentMatrix.jsx';
 import ResearchAnalysis from './components/app/ResearchAnalysis.jsx';
@@ -64,7 +65,7 @@ export default function App(){
 
   let view=null;
   if(activeNav==='simulation') view=<SimulationDashboard results={results} activeMode={activeMode} runCfg={runCfg} solverLabel={solverLabel}/>;
-  if(activeNav==='analysis') view=<ResearchAnalysis results={results} runCfg={runCfg} batchResult={batchResult}/>;
+  if(activeNav==='analysis') view=<div className="analysis-route-stack"><ResearchAnalysis results={results} runCfg={runCfg}/><BatchAnalysis batchResult={batchResult}/></div>;
   if(activeNav==='scenarios') view=<ExperimentMatrix draftCfg={draftCfg} setDraftCfg={setDraftCfg} presetId={presetId} setPresetId={setPresetId} batchResult={batchResult} setBatchResult={setBatchResult} navigate={navigate}/>;
   if(activeNav==='documentation') view=<DocumentationView/>;
   if(activeNav==='settings') view=<SettingsView draftCfg={draftCfg} setDraftCfg={setDraftCfg}/>;
