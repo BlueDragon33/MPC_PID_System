@@ -27,9 +27,60 @@ function mean(values) {
   return finiteValues.length ? finiteValues.reduce((sum, value) => sum + value, 0) / finiteValues.length : null;
 }
 
+function compactTrace(samples) {
+  return samples.map((sample) => ({
+    t: sample.t,
+    x: sample.x,
+    v: sample.v,
+    controllerX: sample.controllerX,
+    controllerV: sample.controllerV,
+    measurement: sample.measurement,
+    estimateX: sample.estimateX,
+    u: sample.u,
+    reference: sample.reference,
+    disturbance: sample.disturbance,
+    covarianceTrace: sample.covarianceTrace,
+    triggered: Boolean(sample.triggered),
+    triggerReason: sample.triggerReason || '',
+    solverStatus: sample.solverStatus || null,
+    fallbackUsed: Boolean(sample.fallbackUsed),
+    safetyViolation: finite(sample.safetyViolation),
+    governorSafetyIntervened: Boolean(sample.governorSafetyIntervened),
+  }));
+}
+
+function compactSolverRecords(records) {
+  return records.map((record) => ({
+    solveMs: record.solveMs,
+    solver: record.solver,
+    status: record.status,
+    fallbackUsed: Boolean(record.fallbackUsed),
+    fallbackReason: record.fallbackReason || null,
+  }));
+}
+
+export function compareExperimentCases(a, b) {
+  const aUnsafe = finite(a?.metrics?.safetyViolationCount);
+  const bUnsafe = finite(b?.metrics?.safetyViolationCount);
+  if (aUnsafe !== bUnsafe) return aUnsafe - bUnsafe;
+  const aSafety = finite(a?.metrics?.maxActualSafetyViolation);
+  const bSafety = finite(b?.metrics?.maxActualSafetyViolation);
+  if (aSafety !== bSafety) return aSafety - bSafety;
+  const aFallback = finite(a?.metrics?.fallbackCount);
+  const bFallback = finite(b?.metrics?.fallbackCount);
+  if (aFallback !== bFallback) return aFallback - bFallback;
+  const aIae = finite(a?.metrics?.iae, Number.POSITIVE_INFINITY);
+  const bIae = finite(b?.metrics?.iae, Number.POSITIVE_INFINITY);
+  if (aIae !== bIae) return aIae - bIae;
+  return finite(a?.metrics?.solveCount) - finite(b?.metrics?.solveCount);
+}
+
 function summarizeGroup(cases) {
+  const ordered = [...cases].sort(compareExperimentCases);
   return {
     cases: cases.length,
+    bestCaseId: ordered[0]?.id ?? null,
+    worstCaseId: ordered[ordered.length - 1]?.id ?? null,
     meanIae: mean(cases.map((item) => item.metrics.iae)),
     worstIae: Math.max(...cases.map((item) => finite(item.metrics.iae))),
     meanSolveCount: mean(cases.map((item) => item.metrics.solveCount)),
@@ -78,6 +129,8 @@ export function runExperimentMatrix({
             mode,
             metrics: { ...result.metrics },
             config,
+            trace: compactTrace(result.samples),
+            solverRecords: compactSolverRecords(result.solverRecords),
           });
         }
       }
