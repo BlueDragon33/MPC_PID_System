@@ -198,7 +198,7 @@
     {
       "id": "RWP05B",
       "title": "Gate 5B — nonlinear state estimation for UGV bicycle",
-      "status": "ACTIVE",
+      "status": "PASS",
       "dependsOn": [
         "RWP05A"
       ],
@@ -208,6 +208,34 @@
         "deterministic-noise",
         "closed-loop-estimation",
         "safety-audit"
+      ],
+      "evidence": [
+        "deterministic noisy x/y/yaw/v sensor",
+        "4-state nonlinear EKF using bicycle prediction and Jacobian",
+        "controller consumes estimated state only; truth reserved for plant transition and audit",
+        "same-seed trace deterministic and different seed changes command trajectory",
+        "measurement RMSE x/y/yaw/v = 0.1849/0.1762/0.03465/0.1218",
+        "EKF RMSE x/y/yaw/v = 0.03861/0.03504/0.00835/0.03393",
+        "estimated-state path tracking remains close to truth-state baseline",
+        "unsafe samples 0; average covariance trace 0.00720",
+        "Gate 5B workflow + full smoke + full benchmark + web build PASS"
+      ],
+      "productionAuthority": false
+    },
+    {
+      "id": "RWP05C",
+      "title": "Gate 5C — constrained predictive control comparison on nonlinear UGV",
+      "status": "QUEUED",
+      "dependsOn": [
+        "RWP05B"
+      ],
+      "gates": [
+        "nonlinear-prediction-contract",
+        "classical-baseline-comparison",
+        "constraint-feasibility",
+        "safety-audit",
+        "compute-quality-comparison",
+        "deterministic-regression"
       ],
       "evidence": [],
       "productionAuthority": false
