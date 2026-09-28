@@ -6,7 +6,7 @@
     {
       "id": "WP00",
       "title": "Constitution + architecture authority",
-      "status": "ACTIVE",
+      "status": "PASS",
       "dependsOn": [],
       "gates": [
         "constitution",
@@ -16,13 +16,14 @@
       "evidence": [
         "project-profile",
         "layer-map",
-        "work-package-ledger"
+        "work-package-ledger",
+        "PR#2 exact-head constitution+architecture+fast+migration gates"
       ]
     },
     {
       "id": "WP01",
       "title": "Application boundary and UI decoupling",
-      "status": "QUEUED",
+      "status": "PASS",
       "dependsOn": [
         "WP00"
       ],
@@ -33,13 +34,17 @@
       ],
       "evidence": [
         "application-facade",
-        "architecture-check"
+        "architecture-check",
+        "application facade",
+        "presentation core-import removal",
+        "architecture checker",
+        "smoke+build migration gate"
       ]
     },
     {
       "id": "WP02",
       "title": "Contracts and simulator decomposition",
-      "status": "QUEUED",
+      "status": "ACTIVE",
       "dependsOn": [
         "WP01"
       ],
