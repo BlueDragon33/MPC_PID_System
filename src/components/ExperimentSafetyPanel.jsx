@@ -1,15 +1,16 @@
 import React, { useRef, useState } from 'react';
 import { Download, FolderOpen, Save, ShieldCheck, Upload } from 'lucide-react';
 import EstimationPanel from './EstimationPanel.jsx';
-import { defaultConfig } from '../core/simulator.js';
-import { applyExperimentPreset, EXPERIMENT_PRESETS } from '../core/experiments/presets.js';
 import {
+  applyExperimentPreset,
+  defaultConfig,
   downloadExperimentJSON,
+  EXPERIMENT_PRESETS,
   loadExperimentLocal,
   parseExperimentPayload,
   saveExperimentLocal,
-} from '../core/experiments/serialization.js';
-import { SOLVER_BACKENDS } from '../core/solvers/index.js';
+  SOLVER_BACKENDS,
+} from '../application/workbench.js';
 
 function NumberField({ label, value, step = 0.01, onChange }) {
   return (
