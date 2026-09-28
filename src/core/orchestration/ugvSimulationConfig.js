@@ -21,6 +21,7 @@ export const defaultUgvConfig = Object.freeze({
   },
   ugvSafety: {
     laneHalfWidth: 1.5,
+    headingAbsMax: 0.9,
     speedMin: 0,
     speedMax: 8,
   },
