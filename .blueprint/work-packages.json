@@ -84,7 +84,7 @@
     {
       "id": "WP04",
       "title": "Experiment/application services",
-      "status": "ACTIVE",
+      "status": "PASS",
       "dependsOn": [
         "WP03"
       ],
@@ -92,12 +92,17 @@
         "batch-determinism",
         "serialization-roundtrip"
       ],
-      "evidence": []
+      "evidence": [
+        "core experiment serialization is pure data logic",
+        "browser persistence/download moved to application layer",
+        "workbench facade decomposed into simulation, experiment and research services",
+        "experiment services gate: roundtrip + matrix determinism + build PASS"
+      ]
     },
     {
       "id": "WP05",
       "title": "Presentation state and route isolation",
-      "status": "QUEUED",
+      "status": "ACTIVE",
       "dependsOn": [
         "WP04"
       ],
