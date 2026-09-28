@@ -1,6 +1,5 @@
 import { finalizeInequalities } from './constraints.js';
 import { solveGenericConstrainedQP } from '../solvers/genericConstrainedQP.js';
-import { saturateUgvCommand } from '../models/kinematicBicycle.js';
 import { ugvReferenceAtX, ugvTrackingErrors } from '../models/ugvReferencePath.js';
 
 const zeros = (rows, cols) => Array.from({ length: rows }, () => new Array(cols).fill(0));
@@ -104,7 +103,7 @@ function addBound(rows, dimension, index, coefficient, bound, kind, stage, varia
 }
 
 function buildErrorModel(reference, cfg) {
-  const dt = cfg.dt;
+  const dt = cfg.ugvLtvMpc.predictionDt ?? cfg.ugvLtvMpc.solveInterval ?? cfg.dt;
   const speed = Math.max(0.2, reference.speed);
   const wheelbase = cfg.ugv.wheelbase;
   const steeringFeedforward = Math.atan(wheelbase * reference.curvature);
@@ -172,10 +171,11 @@ export function buildUgvLtvQp(state, previousCommand, cfg) {
   const accelMax = cfg.ugv.accelerationMax;
   const steerErrorMin = cfg.ugv.steeringMin - steeringFeedforward;
   const steerErrorMax = cfg.ugv.steeringMax - steeringFeedforward;
-  const accelRateMin = cfg.ugv.accelerationRateMin * cfg.dt;
-  const accelRateMax = cfg.ugv.accelerationRateMax * cfg.dt;
-  const steerRateMin = cfg.ugv.steeringRateMin * cfg.dt;
-  const steerRateMax = cfg.ugv.steeringRateMax * cfg.dt;
+  const predictionDt = cfg.ugvLtvMpc.predictionDt ?? cfg.ugvLtvMpc.solveInterval ?? cfg.dt;
+  const accelRateMin = cfg.ugv.accelerationRateMin * predictionDt;
+  const accelRateMax = cfg.ugv.accelerationRateMax * predictionDt;
+  const steerRateMin = cfg.ugv.steeringRateMin * predictionDt;
+  const steerRateMax = cfg.ugv.steeringRateMax * predictionDt;
 
   for (let k = 0; k < horizon; k += 1) {
     const aIndex = k * inputs;
@@ -323,7 +323,10 @@ export function solveUgvLtvMpc(
   const steering = accepted
     ? qp.steeringFeedforward + solution.x[1]
     : previousCommand.steering;
-  const command = saturateUgvCommand({ acceleration, steering }, previousCommand, cfg);
+  const command = {
+    acceleration: Math.max(cfg.ugv.accelerationMin, Math.min(cfg.ugv.accelerationMax, acceleration)),
+    steering: Math.max(cfg.ugv.steeringMin, Math.min(cfg.ugv.steeringMax, steering)),
+  };
 
   return {
     command,
