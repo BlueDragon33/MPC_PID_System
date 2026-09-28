@@ -168,6 +168,25 @@
       "productionAuthority": false
     },
     {
+      "id": "RWP05A",
+      "title": "Gate 5A — UGV kinematic bicycle + classical baseline",
+      "status": "ACTIVE",
+      "dependsOn": [
+        "WP06R"
+      ],
+      "gates": [
+        "nonlinear-model-contract",
+        "classical-baseline-regression",
+        "deterministic-scenario",
+        "safety-audit",
+        "quality-compute-metrics",
+        "full-regression",
+        "web-build"
+      ],
+      "evidence": [],
+      "productionAuthority": false
+    },
+    {
       "id": "WP07",
       "title": "Release hardening and exact-head evidence",
       "status": "QUEUED",
