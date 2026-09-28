@@ -1,7 +1,4 @@
 import { createPIDController } from './controllers/pid.js';
-import { createAugmentedDisturbanceKalmanFilter } from './estimation/augmentedDisturbanceKalmanFilter.js';
-import { createLinearKalmanFilter } from './estimation/linearKalmanFilter.js';
-import { createMeasurementSensor } from './estimation/measurementSensor.js';
 import { applyCovarianceConstraintTightening } from './estimation/uncertaintyTightening.js';
 import {
   createSecondOrderModel,
@@ -19,6 +16,7 @@ import { solveMPC } from './solvers/index.js';
 import { evaluateEventTrigger } from './triggers/eventTrigger.js';
 import { defaultConfig, mergeSimulationConfig } from './orchestration/simulationConfig.js';
 import { computeSimulationMetrics, safetyViolationAt } from './orchestration/simulationMetrics.js';
+import { createEstimatorRuntime } from './orchestration/estimatorRuntime.js';
 
 export { defaultConfig };
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
@@ -40,71 +38,23 @@ export function runSimulation(mode, userConfig = {}) {
   const model = createSecondOrderModel(cfg);
   const truthCfg = createTruthPlantConfig(cfg);
   const truthModel = createSecondOrderModel(truthCfg);
-  const estimationEnabled = Boolean(cfg.estimation.enabled);
-  const disturbanceStateEnabled = Boolean(estimationEnabled && cfg.estimation.disturbanceStateEnabled);
-  const disturbancePredictionEnabled = Boolean(disturbanceStateEnabled && cfg.estimation.disturbancePredictionEnabled);
-  const mpcDisturbanceCompensationEnabled = Boolean(disturbanceStateEnabled && cfg.estimation.mpcDisturbanceCompensationEnabled);
-  const sensor = createMeasurementSensor({
-    C: model.C,
-    noiseStd: estimationEnabled ? cfg.estimation.measurementNoiseStd : 0,
-    seed: cfg.estimation.seed,
-    bias: estimationEnabled ? cfg.estimation.measurementBias : 0,
-  });
-
   let state = { x: 0, v: 0 };
-  let controllerState = { ...state };
-  let measurementSample = sensor.read(state);
-  let estimator = null;
-  let estimatorDiagnostics = null;
-  let estimatorCovariance = null;
-  let covarianceTrace = null;
-  let disturbanceEstimate = 0;
-  let disturbanceVariance = null;
+  const estimatorRuntime = createEstimatorRuntime({ cfg, model, initialState: state });
+  const {
+    estimationEnabled,
+    disturbanceStateEnabled,
+    disturbancePredictionEnabled,
+    mpcDisturbanceCompensationEnabled,
+  } = estimatorRuntime.flags;
 
-  if (estimationEnabled) {
-    estimator = disturbanceStateEnabled
-      ? createAugmentedDisturbanceKalmanFilter({
-          A: model.A,
-          B: model.B,
-          E: model.E,
-          C: model.C,
-          processCovariance: [
-            cfg.estimation.processPositionVariance,
-            cfg.estimation.processVelocityVariance,
-            cfg.estimation.disturbanceProcessVariance,
-          ],
-          measurementVariance: Math.max(1e-12, cfg.estimation.measurementNoiseStd ** 2),
-          initialState: [state.x, state.v, 0],
-          initialCovariance: [
-            cfg.estimation.initialPositionVariance,
-            cfg.estimation.initialVelocityVariance,
-            cfg.estimation.initialDisturbanceVariance,
-          ],
-          disturbanceRetention: cfg.estimation.disturbanceRetention,
-        })
-      : createLinearKalmanFilter({
-          A: model.A,
-          B: model.B,
-          C: model.C,
-          processCovariance: [
-            cfg.estimation.processPositionVariance,
-            cfg.estimation.processVelocityVariance,
-          ],
-          measurementVariance: Math.max(1e-12, cfg.estimation.measurementNoiseStd ** 2),
-          initialState: [state.x, state.v],
-          initialCovariance: [
-            cfg.estimation.initialPositionVariance,
-            cfg.estimation.initialVelocityVariance,
-          ],
-        });
-    const initialEstimate = estimator.update(measurementSample.value);
-    controllerState = { x: initialEstimate.x, v: initialEstimate.v };
-    disturbanceEstimate = disturbanceStateEnabled ? initialEstimate.d : 0;
-    estimatorDiagnostics = initialEstimate.diagnostics;
-    estimatorCovariance = initialEstimate.covariance;
-    covarianceTrace = estimatorDiagnostics.covarianceTrace;
-    disturbanceVariance = disturbanceStateEnabled ? estimatorCovariance?.[2]?.[2] ?? null : null;
-  }
+  let estimatorSnapshot = estimatorRuntime.current();
+  let controllerState = estimatorSnapshot.controllerState;
+  let measurementSample = estimatorSnapshot.measurementSample;
+  let estimatorDiagnostics = estimatorSnapshot.diagnostics;
+  let estimatorCovariance = estimatorSnapshot.covariance;
+  let covarianceTrace = estimatorSnapshot.covarianceTrace;
+  let disturbanceEstimate = estimatorSnapshot.disturbanceEstimate;
+  let disturbanceVariance = estimatorSnapshot.disturbanceVariance;
 
   let expectedState = { ...controllerState };
   let lastSolveState = { ...controllerState };
@@ -343,23 +293,14 @@ export function runSimulation(mode, userConfig = {}) {
     previousU = u;
     state = stepSecondOrderPlant(state, u, disturbance, truthCfg);
 
-    measurementSample = sensor.read(state);
-    if (estimationEnabled) {
-      const estimate = estimator.step(u, measurementSample.value);
-      controllerState = { x: estimate.x, v: estimate.v };
-      disturbanceEstimate = disturbanceStateEnabled ? estimate.d : 0;
-      estimatorDiagnostics = estimate.diagnostics;
-      estimatorCovariance = estimate.covariance;
-      covarianceTrace = estimate.diagnostics.covarianceTrace;
-      disturbanceVariance = disturbanceStateEnabled ? estimatorCovariance?.[2]?.[2] ?? null : null;
-    } else {
-      controllerState = { ...state };
-      disturbanceEstimate = 0;
-      estimatorDiagnostics = null;
-      estimatorCovariance = null;
-      covarianceTrace = null;
-      disturbanceVariance = null;
-    }
+    estimatorSnapshot = estimatorRuntime.step(u, state);
+    controllerState = estimatorSnapshot.controllerState;
+    measurementSample = estimatorSnapshot.measurementSample;
+    estimatorDiagnostics = estimatorSnapshot.diagnostics;
+    estimatorCovariance = estimatorSnapshot.covariance;
+    covarianceTrace = estimatorSnapshot.covarianceTrace;
+    disturbanceEstimate = estimatorSnapshot.disturbanceEstimate;
+    disturbanceVariance = estimatorSnapshot.disturbanceVariance;
 
     shiftMpcPlan();
   }
