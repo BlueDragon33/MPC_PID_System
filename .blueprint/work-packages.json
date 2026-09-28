@@ -182,6 +182,28 @@
       ],
       "evidence": [],
       "requiresExplicitOwnerRelease": true
+    },
+    {
+      "id": "WP08",
+      "title": "Gate 5A UGV bicycle nonlinear baseline",
+      "status": "ACTIVE",
+      "dependsOn": [
+        "WP06R"
+      ],
+      "gates": [
+        "ugv-model-contract",
+        "classical-baseline",
+        "ekf-regression",
+        "ltv-mpc-feasibility",
+        "closed-loop-comparison",
+        "determinism",
+        "architecture",
+        "full-smoke",
+        "full-benchmark",
+        "web-build"
+      ],
+      "evidence": [],
+      "productionAuthority": false
     }
   ]
 }
