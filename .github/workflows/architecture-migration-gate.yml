@@ -1,0 +1,34 @@
+name: MPC PID Architecture Migration Gate
+
+on:
+  pull_request:
+    paths:
+      - ".blueprint/**"
+      - "src/application/**"
+      - "src/contracts/**"
+      - "src/components/**"
+      - "src/App.jsx"
+      - "scripts/architectureCheck.mjs"
+      - ".github/workflows/architecture-*.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  migration:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Architecture boundary gate
+        run: node scripts/architectureCheck.mjs
+      - name: Control regression gate
+        run: npm run smoke
+      - name: Web-app build gate
+        run: npm run build
