@@ -137,11 +137,42 @@
       ]
     },
     {
+      "id": "WP06R",
+      "title": "Release readiness preparation",
+      "status": "PASS",
+      "dependsOn": [
+        "WP06"
+      ],
+      "gates": [
+        "dependency-lock",
+        "security-scan",
+        "exact-head-evidence",
+        "artifact-integrity",
+        "rollback-readiness",
+        "release-candidate-smoke"
+      ],
+      "evidence": [
+        "exact top-level dependency versions pinned in package.json",
+        "generated dependency graph locked by SHA-256 2e167cfb6c7602f05d61674d9539b3f3e231d95ddaa338699a8620dc48b19e69",
+        "npm audit --audit-level=high PASS",
+        "high-signal source secret scan PASS",
+        "architecture + orchestration + presentation + recovery contracts PASS",
+        "full control smoke + full research benchmark PASS",
+        "standalone build artifact SHA-256 manifest verified",
+        "browser online/offline candidate smoke PASS",
+        "readiness run #6 artifact release-readiness-6815da9baa7e9c6d40e5b74411210bea4700a41b",
+        "artifact archive digest sha256:9fb9b0a11f0fcfd00c3e32a4588533dcc5c14f1f3c5c4891590d032a7f6009e1",
+        "rollback target recorded as 5c9f9333179e59a243b269810148ab2058329353",
+        "manual protected Production Release workflow available; no production deployment executed"
+      ],
+      "productionAuthority": false
+    },
+    {
       "id": "WP07",
       "title": "Release hardening and exact-head evidence",
       "status": "QUEUED",
       "dependsOn": [
-        "WP06"
+        "WP06R"
       ],
       "gates": [
         "release-mode",

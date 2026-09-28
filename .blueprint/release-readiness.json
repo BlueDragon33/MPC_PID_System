@@ -1,0 +1,32 @@
+{
+  "schemaVersion": "1.0.0",
+  "readinessId": "mpc-pid:release-readiness",
+  "mode": "pre-release-only",
+  "productionAuthority": false,
+  "sourceBranch": "hardening/release-readiness",
+  "releaseWorkPackage": "WP07",
+  "explicitReleaseRequired": true,
+  "requiredEvidence": [
+    "exact commit SHA",
+    "exact-version dependency graph + generated lock SHA-256",
+    "architecture gate",
+    "source secret scan",
+    "dependency vulnerability audit",
+    "full control smoke",
+    "full benchmark",
+    "standalone build",
+    "artifact SHA-256 manifest",
+    "rollback target",
+    "preview browser smoke",
+    "offline browser smoke",
+    "manual production workflow with explicit authority and deployment-target preconditions"
+  ],
+  "releaseBlockers": [
+    "WP07 must remain QUEUED until owner explicitly requests stable/production release.",
+    "No deployment step is allowed in Release Readiness workflow.",
+    "Exact-head evidence must refer to the candidate SHA that produced the artifact.",
+    "A rollback target must be recorded before any Production Release can begin.",
+    "Dependency resolution must match the approved generated-lock SHA-256 before install/build.",
+    "GitHub Pages target cannot deploy unless Pages is already enabled and configure-pages succeeds."
+  ]
+}

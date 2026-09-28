@@ -1,0 +1,193 @@
+name: MPC PID Protected Production Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_sha:
+        description: "Exact 40-character commit SHA to release"
+        required: true
+        type: string
+      rollback_sha:
+        description: "Exact previously verified SHA to use as rollback target"
+        required: true
+        type: string
+      confirm:
+        description: "Type RELEASE to authorize Production Release Mode"
+        required: true
+        type: string
+      deploy_target:
+        description: "Deployment target"
+        required: true
+        default: "artifact-only"
+        type: choice
+        options:
+          - artifact-only
+          - github-pages
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: mpc-pid-production-release
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 22
+    outputs:
+      release_sha: ${{ steps.authority.outputs.release_sha }}
+      rollback_sha: ${{ steps.authority.outputs.rollback_sha }}
+      deploy_target: ${{ steps.authority.outputs.deploy_target }}
+    steps:
+      - name: Validate explicit release authority
+        id: authority
+        shell: bash
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          ROLLBACK_SHA: ${{ inputs.rollback_sha }}
+          CONFIRM: ${{ inputs.confirm }}
+          DEPLOY_TARGET: ${{ inputs.deploy_target }}
+        run: |
+          set -euo pipefail
+          if [[ "$CONFIRM" != "RELEASE" ]]; then
+            echo "::error::Production Release Mode requires confirm=RELEASE."
+            exit 1
+          fi
+          if [[ ! "$RELEASE_SHA" =~ ^[0-9a-fA-F]{40}$ ]]; then
+            echo "::error::release_sha must be an exact 40-character commit SHA."
+            exit 1
+          fi
+          if [[ ! "$ROLLBACK_SHA" =~ ^[0-9a-fA-F]{40}$ ]]; then
+            echo "::error::rollback_sha must be an exact 40-character commit SHA."
+            exit 1
+          fi
+          echo "release_sha=$RELEASE_SHA" >> "$GITHUB_OUTPUT"
+          echo "rollback_sha=$ROLLBACK_SHA" >> "$GITHUB_OUTPUT"
+          echo "deploy_target=$DEPLOY_TARGET" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.authority.outputs.release_sha }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Verify candidate revision is release-capable
+        shell: bash
+        run: |
+          set -euo pipefail
+          node - <<'NODE'
+          const fs = require('fs');
+          const ledger = JSON.parse(fs.readFileSync('.blueprint/work-packages.json', 'utf8'));
+          const wp06r = ledger.packages.find((item) => item.id === 'WP06R');
+          const wp07 = ledger.packages.find((item) => item.id === 'WP07');
+          if (!wp06r || wp06r.status !== 'PASS') {
+            throw new Error('WP06R must be PASS before Production Release Mode.');
+          }
+          if (!wp07 || wp07.requiresExplicitOwnerRelease !== true) {
+            throw new Error('WP07 explicit owner release invariant is missing.');
+          }
+          NODE
+
+      - name: Resolve approved dependency graph
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f package-lock.json
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+          actual="$(sha256sum package-lock.json | awk '{print $1}')"
+          expected="$(node -e "const p=require('./.blueprint/dependency-lock.json'); process.stdout.write(p.expectedLockSha256 || '')")"
+          test -n "$expected"
+          if [[ "$actual" != "$expected" ]]; then
+            echo "::error::Dependency lock drift. Expected $expected, got $actual"
+            exit 1
+          fi
+
+      - name: Install exact dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Security and architecture gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm audit --audit-level=high
+          node scripts/architectureCheck.mjs
+          node scripts/releaseSecurityScan.mjs
+
+      - name: Full regression and benchmark
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/orchestrationContractSmoke.mjs
+          node scripts/presentationContractSmoke.mjs
+          node scripts/resilienceSmoke.mjs
+          npm run smoke
+          npm run benchmark
+
+      - name: Build exact production artifact
+        run: npm run build -- --base=./
+
+      - name: Generate and verify production evidence
+        env:
+          RELEASE_CANDIDATE_SHA: ${{ steps.authority.outputs.release_sha }}
+          RELEASE_ROLLBACK_SHA: ${{ steps.authority.outputs.rollback_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/generateReleaseEvidence.mjs dist release-evidence.json
+          node scripts/verifyReleaseEvidence.mjs release-evidence.json dist
+
+      - name: Preserve verified release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-release-${{ steps.authority.outputs.release_sha }}
+          path: |
+            dist
+            package-lock.json
+            release-evidence.json
+            .blueprint/dependency-lock.json
+            .blueprint/rollback-policy.json
+          retention-days: 30
+
+      - name: Verify GitHub Pages availability
+        if: ${{ steps.authority.outputs.deploy_target == 'github-pages' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          code="$(curl --silent --output /tmp/pages.json --write-out '%{http_code}' \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${{ github.repository }}/pages")"
+          if [[ "$code" != "200" ]]; then
+            echo "::error::GitHub Pages is not enabled for this repository; protected release cannot deploy to github-pages."
+            exit 1
+          fi
+
+      - name: Configure GitHub Pages
+        if: ${{ steps.authority.outputs.deploy_target == 'github-pages' }}
+        uses: actions/configure-pages@v5
+
+      - name: Upload GitHub Pages artifact
+        if: ${{ steps.authority.outputs.deploy_target == 'github-pages' }}
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: dist
+
+  deploy-pages:
+    if: ${{ needs.verify.outputs.deploy_target == 'github-pages' }}
+    needs: verify
+    runs-on: ubuntu-24.04
+    environment:
+      name: production
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy exact verified artifact to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

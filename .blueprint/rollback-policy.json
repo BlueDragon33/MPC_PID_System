@@ -1,0 +1,20 @@
+{
+  "schemaVersion": "1.0.0",
+  "strategy": "immutable-known-good-revision",
+  "productionAuthority": false,
+  "currentDevelopmentBaseline": "5c9f9333179e59a243b269810148ab2058329353",
+  "rollbackProcedure": [
+    "Identify the exact deployed release SHA.",
+    "Select the most recent previously verified release SHA.",
+    "Rebuild that SHA through the protected release workflow; do not reuse an unverified local dist directory.",
+    "Verify artifact SHA-256 evidence before deployment.",
+    "Deploy the verified rollback artifact.",
+    "Run post-deploy read-back and smoke checks.",
+    "Record incident, rollback SHA and recovery evidence."
+  ],
+  "prohibited": [
+    "Do not rollback by manually editing generated dist files.",
+    "Do not treat development main as an automatic production rollback target.",
+    "Do not bypass release evidence because a prior build was green."
+  ]
+}
