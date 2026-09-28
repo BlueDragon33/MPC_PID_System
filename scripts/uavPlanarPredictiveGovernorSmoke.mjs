@@ -17,17 +17,17 @@ function scenario(predictiveEnabled,overrides={}){
       enabled:predictiveEnabled,
       horizon:8,
       predictionDt:0.05,
-      thrustOffsets:[-0.9,-0.45,0,0.45,0.9],
+      thrustOffsets:[-0.18,0,0.18],
       torqueOffsets:[-0.08,-0.04,0,0.04,0.08],
       qX:5,
-      qZ:9,
+      qZ:20,
       qVx:2,
-      qVz:3,
+      qVz:8,
       qTheta:2,
       qQ:0.15,
-      rThrust:0.025,
+      rThrust:0.5,
       rTorque:0.06,
-      rProposal:0.06,
+      rProposal:0.12,
       ...(overrides.predictive||{}),
     },
     reference:{...(overrides.reference||{})},
@@ -64,6 +64,10 @@ assertPhysical(predictive,'predictive');
 
 const b=baseline.metrics;
 const p=predictive.metrics;
+console.log('Gate 5F probe',JSON.stringify({
+  classical:{xRmse:b.xRmse,zRmse:b.zRmse,vxRmse:b.vxRmse,vzRmse:b.vzRmse,attitudeTrackingRmse:b.attitudeTrackingRmse,controlEffort:b.controlEffort,computePerStepUs:b.computePerStepUs},
+  predictive:{xRmse:p.xRmse,zRmse:p.zRmse,vxRmse:p.vxRmse,vzRmse:p.vzRmse,attitudeTrackingRmse:p.attitudeTrackingRmse,controlEffort:p.controlEffort,computePerStepUs:p.computePerStepUs,feasibilityRate:p.predictiveFeasibilityRate,fallbackCount:p.predictiveFallbackCount,interventions:p.predictiveInterventions}
+},null,2));
 assert.equal(p.predictiveEnabled,true);
 assert(p.predictiveInterventions>0,'predictive governor never changed the classical proposal');
 assert.equal(p.predictiveFallbackCount,0,`predictive fallback count=${p.predictiveFallbackCount}`);
