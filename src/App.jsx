@@ -6,8 +6,7 @@ import ExperimentMatrix from './components/app/ExperimentMatrix.jsx';
 import ResearchAnalysis from './components/app/ResearchAnalysis.jsx';
 import SimulationDashboard from './components/app/SimulationDashboard.jsx';
 import { DocumentationView, SettingsView } from './components/app/WorkspaceViews.jsx';
-import { compareControllers, defaultConfig } from './core/simulator.js';
-import { SOLVER_BACKENDS } from './core/solvers/index.js';
+import { defaultConfig, executeControllerComparison, SOLVER_BACKENDS } from './application/workbench.js';
 import './solverDiagnostics.css';
 
 const navItems = [
@@ -39,7 +38,7 @@ export default function App(){
   const [activeNav,setActiveNav]=useState(routeFromHash);
   const [presetId,setPresetId]=useState('baseline');
   const [batchResult,setBatchResult]=useState(null);
-  const results=useMemo(()=>compareControllers(runCfg),[runCfg]);
+  const results=useMemo(()=>executeControllerComparison(runCfg),[runCfg]);
   const governed=results.find((result)=>result.mode==='HYBRID_SAFE')||results[0];
   const solverLabel=runCfg.mpc.solver===SOLVER_BACKENDS.CONSTRAINED_QP
     ?'Constrained QP'
