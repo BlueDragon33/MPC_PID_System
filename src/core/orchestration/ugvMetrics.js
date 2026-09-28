@@ -20,6 +20,12 @@ export function computeUgvMetrics(samples, solverRecords, cfg) {
   const accepted = solverRecords.filter((record) => record.status === 'solved' || record.status === 'max-iterations').length;
   const fallback = solverRecords.filter((record) => record.fallbackUsed).length;
   const solveTimes = solverRecords.map((record) => record.solveMs).filter(Number.isFinite);
+  const residuals = solverRecords
+    .map((record) => record.diagnostics?.projectedGradientResidual)
+    .filter(Number.isFinite);
+  const feasibilityViolations = solverRecords
+    .map((record) => record.diagnostics?.feasibilityViolation)
+    .filter(Number.isFinite);
 
   return {
     duration: cfg.duration,
@@ -47,6 +53,10 @@ export function computeUgvMetrics(samples, solverRecords, cfg) {
     fallbackCount: fallback,
     averageSolveMs: average(solveTimes),
     maxSolveMs: solveTimes.length ? Math.max(...solveTimes) : 0,
+    averageOptimalityResidual: average(residuals),
+    maxOptimalityResidual: residuals.length ? Math.max(...residuals) : 0,
+    averageFeasibilityViolation: average(feasibilityViolations),
+    maxFeasibilityViolation: feasibilityViolations.length ? Math.max(...feasibilityViolations) : 0,
     estimateXRmse: estimateX.length ? rms(estimateX) : null,
     estimateYRmse: estimateY.length ? rms(estimateY) : null,
     estimateYawRmse: estimateYaw.length ? rms(estimateYaw) : null,
