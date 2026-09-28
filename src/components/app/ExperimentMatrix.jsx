@@ -1,8 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { BarChart3, CheckCircle2, Database, FlaskConical, Play, RotateCcw, ShieldCheck } from 'lucide-react';
-import { EXPERIMENT_PRESETS, applyExperimentPreset } from '../../core/experiments/presets.js';
-import { runExperimentMatrix } from '../../core/experiments/experimentMatrix.js';
-import { defaultConfig } from '../../core/simulator.js';
+import { applyExperimentPreset, defaultConfig, executeExperimentMatrix, EXPERIMENT_PRESETS } from '../../application/workbench.js';
 import './experimentMatrix.css';
 
 const DEFAULT_PRESETS = ['baseline', 'safety-envelope', 'noisy-estimation', 'mismatch-observer'];
@@ -39,7 +37,7 @@ export default function ExperimentMatrix({
   const runMatrix = () => {
     try {
       setError('');
-      const result = runExperimentMatrix({
+      const result = executeExperimentMatrix({
         presetIds: selected,
         seeds,
         noiseScales,
