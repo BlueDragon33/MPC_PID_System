@@ -29,7 +29,7 @@ const files = walk(distDir).map((file) => ({
   sha256: sha256(file),
 }));
 
-const candidateSha = process.env.GITHUB_SHA || process.env.RELEASE_CANDIDATE_SHA || 'unknown';
+const candidateSha = process.env.RELEASE_CANDIDATE_SHA || process.env.GITHUB_SHA || 'unknown';
 const rollbackSha = process.env.RELEASE_ROLLBACK_SHA || 'unknown';
 const repository = process.env.GITHUB_REPOSITORY || 'BlueDragon33/MPC_PID_System';
 
