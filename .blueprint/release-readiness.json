@@ -8,7 +8,7 @@
   "explicitReleaseRequired": true,
   "requiredEvidence": [
     "exact commit SHA",
-    "dependency lock",
+    "exact-version dependency graph + generated lock SHA-256",
     "architecture gate",
     "source secret scan",
     "dependency vulnerability audit",
@@ -24,6 +24,7 @@
     "WP07 must remain QUEUED until owner explicitly requests stable/production release.",
     "No deployment step is allowed in Release Readiness workflow.",
     "Exact-head evidence must refer to the candidate SHA that produced the artifact.",
-    "A rollback target must be recorded before any Production Release can begin."
+    "A rollback target must be recorded before any Production Release can begin.",
+    "Dependency resolution must match the approved generated-lock SHA-256 before install/build."
   ]
 }
