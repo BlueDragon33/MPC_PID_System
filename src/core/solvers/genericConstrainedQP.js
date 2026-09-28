@@ -32,17 +32,73 @@ function maxRowAbsSum(H) {
   );
 }
 
-function project(qp, x, options) {
-  return projectPolyhedronDykstra(qp.inequalities, x, {
+function sparseDot(row, x) {
+  let sum = 0;
+  for (let k = 0; k < row.indices.length; k += 1) {
+    sum += row.values[k] * x[row.indices[k]];
+  }
+  return sum;
+}
+
+function repairTowardFeasibleAnchor(inequalities, anchor, candidate, tolerance) {
+  const anchorViolation = inequalityViolation(inequalities, anchor);
+  if (anchorViolation.maxViolation > tolerance) return null;
+
+  const direction = candidate.map((value, i) => value - anchor[i]);
+  let alpha = 1;
+  for (const row of inequalities.rows) {
+    const base = sparseDot(row, anchor);
+    let directional = 0;
+    for (let k = 0; k < row.indices.length; k += 1) {
+      directional += row.values[k] * direction[row.indices[k]];
+    }
+    if (directional <= 0) continue;
+    alpha = Math.min(alpha, Math.max(0, (row.bound - base) / directional));
+  }
+
+  // Step infinitesimally inside the polyhedron to absorb floating-point error.
+  alpha = Math.max(0, Math.min(1, alpha * (1 - 1e-12)));
+  const x = anchor.map((value, i) => value + alpha * direction[i]);
+  return {
+    x,
+    alpha,
+    feasibility: inequalityViolation(inequalities, x),
+  };
+}
+
+function project(qp, x, options, feasibleAnchor = null) {
+  const projected = projectPolyhedronDykstra(qp.inequalities, x, {
     maxCycles: options.projectionCycles,
     tolerance: options.projectionTolerance,
   });
+  if (projected.maxViolation <= options.feasibilityTolerance) {
+    return { ...projected, anchorRepairUsed: false, anchorAlpha: 1 };
+  }
+  if (!feasibleAnchor) return { ...projected, anchorRepairUsed: false, anchorAlpha: null };
+
+  const repaired = repairTowardFeasibleAnchor(
+    qp.inequalities,
+    feasibleAnchor,
+    projected.x,
+    options.feasibilityTolerance,
+  );
+  if (!repaired) return { ...projected, anchorRepairUsed: false, anchorAlpha: null };
+  return {
+    ...projected,
+    x: repaired.x,
+    maxViolation: repaired.feasibility.maxViolation,
+    violated: repaired.feasibility.violated,
+    worstViolation: repaired.feasibility.worst,
+    converged: repaired.feasibility.maxViolation <= options.feasibilityTolerance,
+    anchorRepairUsed: true,
+    anchorAlpha: repaired.alpha,
+  };
 }
 
 function projectedGradientResidual(qp, x, step, options) {
   const g = gradient(qp, x);
   const trial = x.map((value, i) => value - step * g[i]);
-  const projected = project(qp, trial, options);
+  const projected = project(qp, trial, options, x);
   return {
     residual: maxAbs(x.map((value, i) => (value - projected.x[i]) / step)),
     projection: projected,
@@ -64,8 +120,12 @@ export function solveGenericConstrainedQP(qp, options = {}, warmStart = null) {
   const seed = warmStart?.length === dimension
     ? [...warmStart]
     : new Array(dimension).fill(0);
-  const initial = project(qp, seed, opts);
+  const seedFeasibility = inequalityViolation(qp.inequalities, seed);
+  const seedAnchor = seedFeasibility.maxViolation <= opts.feasibilityTolerance ? [...seed] : null;
+  const initial = project(qp, seed, opts, seedAnchor);
   let x = initial.x;
+  let feasibleAnchor = initial.maxViolation <= opts.feasibilityTolerance ? [...x] : seedAnchor;
+  let anchorRepairs = initial.anchorRepairUsed ? 1 : 0;
 
   if (initial.maxViolation > opts.feasibilityTolerance * 10) {
     return {
@@ -118,6 +178,9 @@ export function solveGenericConstrainedQP(qp, options = {}, warmStart = null) {
     }
 
     x = candidate;
+    if (inequalityViolation(qp.inequalities, x).maxViolation <= opts.feasibilityTolerance) {
+      feasibleAnchor = [...x];
+    }
     previousObjective = candidateObjective;
     residualInfo = projectedGradientResidual(qp, x, step, opts);
     projectionCycles += residualInfo.projection.cycles;
@@ -150,6 +213,7 @@ export function solveGenericConstrainedQP(qp, options = {}, warmStart = null) {
       lipschitzEstimate: lipschitz,
       stepSize: step,
       finite: x.every(Number.isFinite) && Number.isFinite(previousObjective),
+      anchorRepairs,
     },
   };
 }
