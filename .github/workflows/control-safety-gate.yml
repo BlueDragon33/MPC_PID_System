@@ -1,0 +1,37 @@
+name: MPC PID Control Safety Gate
+
+on:
+  pull_request:
+    paths:
+      - ".blueprint/**"
+      - "src/core/controllers/**"
+      - "src/core/triggers/**"
+      - "src/core/safety/**"
+      - "src/core/mpc/**"
+      - "src/core/solvers/**"
+      - "src/core/orchestration/**"
+      - "src/core/simulator.js"
+      - "scripts/**"
+      - ".github/workflows/control-safety-gate.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  control-safety:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Core layer boundary gate
+        run: node scripts/architectureCheck.mjs
+      - name: Solver and safety regression
+        run: npm run smoke
+      - name: Research solver benchmark
+        run: npm run benchmark
