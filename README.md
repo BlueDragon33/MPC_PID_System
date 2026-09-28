@@ -131,6 +131,22 @@ d-hat-aware Event Monitor:
 
 Affine disturbance compensation đã được regression-test trong condensed QP và closed loop, nhưng vẫn **opt-in** vì lợi ích tracking/compute hiện còn rất nhỏ trên linear plant. Không dùng kết quả này để kết luận tổng quát cho nonlinear plants.
 
+### Nonlinear UGV bicycle baseline
+
+Gate 5A now includes a nonlinear 4-state kinematic bicycle plant with a classical Stanley-style lateral controller and PID speed loop.
+
+Representative deterministic regression:
+
+```text
+cross-track RMSE: 0.3058 m
+heading RMSE:     0.0782 rad
+speed RMSE:       0.6415 m/s
+unsafe samples:   0
+final speed:      4.005 m/s
+```
+
+Steering angle, steering-rate, acceleration and speed are bounded explicitly. CI simulation timing is recorded for comparison only and is not treated as a hardware real-time claim.
+
 ### Reproducible experiments
 
 Preset hiện có gồm:
@@ -193,7 +209,9 @@ src/core/
 - Safety Governor / admissibility filter — PASS
 - Linear Kalman state estimation + covariance-aware safety — PASS
 - Model mismatch + disturbance-state estimation — PASS
-- **Nonlinear UGV/UAV/USV models — NEXT**
+- Nonlinear UGV bicycle + classical baseline — PASS
+- **UGV nonlinear state estimation — NEXT**
+- UAV planar / USV planar models — LATER
 - NMPC — LATER
 - Adaptive / Learning MPC — LATER
 - HIL / hardware timing validation — LATER
