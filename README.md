@@ -165,6 +165,24 @@ unsafe samples: 0
 
 Ground truth is reserved for plant propagation and audit; steering/speed control consumes estimated state when Gate 5B estimation is enabled.
 
+### UGV constrained predictive governor
+
+Gate 5C compares the EKF-driven classical UGV controller with a finite-candidate predictive governor using nonlinear bicycle rollouts and explicit constraints.
+
+Representative A/B:
+
+```text
+cross-track RMSE: 0.3078 → 0.1287 m
+heading RMSE:     0.0787 → 0.0575 rad
+control effort:   1.3268 → 1.1802
+unsafe samples:   0 → 0
+compute/step:     68.6 → 82.0 us
+predicted feasible: 100%
+fallback:            0
+```
+
+This is intentionally **not labeled NMPC**: it does not optimize a full nonlinear control sequence and has no nonlinear-program warm start/solver yet.
+
 ### Reproducible experiments
 
 Preset hiện có gồm:
@@ -229,8 +247,9 @@ src/core/
 - Model mismatch + disturbance-state estimation — PASS
 - Nonlinear UGV bicycle + classical baseline — PASS
 - UGV nonlinear state estimation — PASS
-- **UGV constrained predictive control comparison — NEXT**
-- UAV planar / USV planar models — LATER
+- UGV constrained predictive control comparison — PASS
+- **UAV planar/attitude classical baseline — NEXT**
+- USV planar model — LATER
 - NMPC — LATER
 - Adaptive / Learning MPC — LATER
 - HIL / hardware timing validation — LATER
