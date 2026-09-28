@@ -1,4 +1,5 @@
-import { defaultConfig, runSimulation } from '../simulator.js';
+import { runSimulation } from '../simulator.js';
+import { defaultConfig } from '../orchestration/simulationConfig.js';
 import { applyExperimentPreset, getExperimentPreset } from './presets.js';
 
 const finite = (value, fallback = 0) => Number.isFinite(value) ? value : fallback;

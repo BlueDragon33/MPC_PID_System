@@ -1,0 +1,194 @@
+{
+  "schemaVersion": "1.0.0",
+  "architectureId": "mpc-pid:layered-foundation",
+  "policyVersion": "1.1.0",
+  "direction": "outer-layers-depend-inward-only",
+  "layers": [
+    {
+      "id": "L00",
+      "name": "governance",
+      "paths": [
+        ".blueprint/**",
+        "docs/**"
+      ],
+      "role": "Constitution, blueprint, gates, evidence and release policy.",
+      "allowedDependencies": []
+    },
+    {
+      "id": "L01",
+      "name": "contracts",
+      "paths": [
+        "src/contracts/**"
+      ],
+      "role": "Stable schemas, result/config contracts and capability boundaries.",
+      "allowedDependencies": []
+    },
+    {
+      "id": "L02",
+      "name": "domain-model",
+      "paths": [
+        "src/core/models/**"
+      ],
+      "role": "Plant/domain mathematics without UI or orchestration.",
+      "allowedDependencies": [
+        "contracts"
+      ]
+    },
+    {
+      "id": "L03",
+      "name": "estimation",
+      "paths": [
+        "src/core/estimation/**"
+      ],
+      "role": "Sensors, noise models, Kalman/RLS estimation primitives.",
+      "allowedDependencies": [
+        "contracts",
+        "domain-model"
+      ]
+    },
+    {
+      "id": "L04",
+      "name": "optimization",
+      "paths": [
+        "src/core/mpc/**",
+        "src/core/solvers/**"
+      ],
+      "role": "Prediction, constraints and numerical optimization.",
+      "allowedDependencies": [
+        "contracts",
+        "domain-model"
+      ]
+    },
+    {
+      "id": "L05",
+      "name": "control-safety",
+      "paths": [
+        "src/core/controllers/**",
+        "src/core/triggers/**",
+        "src/core/safety/**"
+      ],
+      "role": "Fast control, event scheduling and safety authority.",
+      "allowedDependencies": [
+        "contracts",
+        "domain-model",
+        "optimization"
+      ]
+    },
+    {
+      "id": "L06",
+      "name": "orchestration",
+      "paths": [
+        "src/core/simulator.js",
+        "src/core/experiments/**",
+        "src/core/orchestration/**"
+      ],
+      "role": "Closed-loop composition and reproducible experiment execution.",
+      "allowedDependencies": [
+        "contracts",
+        "domain-model",
+        "estimation",
+        "optimization",
+        "control-safety"
+      ]
+    },
+    {
+      "id": "L07",
+      "name": "research-shadow",
+      "paths": [
+        "src/core/adaptation/**"
+      ],
+      "role": "Bounded research/adaptation with no implicit control authority.",
+      "allowedDependencies": [
+        "contracts",
+        "domain-model",
+        "estimation",
+        "orchestration"
+      ]
+    },
+    {
+      "id": "L08",
+      "name": "application",
+      "paths": [
+        "src/application/**"
+      ],
+      "role": "Use-case facade consumed by presentation; owns cross-core composition for UI.",
+      "allowedDependencies": [
+        "contracts",
+        "orchestration",
+        "optimization",
+        "research-shadow"
+      ]
+    },
+    {
+      "id": "L09",
+      "name": "presentation",
+      "paths": [
+        "src/App.jsx",
+        "src/main.jsx",
+        "src/components/**"
+      ],
+      "role": "Web-app interaction and visualization only.",
+      "allowedDependencies": [
+        "contracts",
+        "application",
+        "presentation"
+      ]
+    },
+    {
+      "id": "L10",
+      "name": "platform",
+      "paths": [
+        "public/**",
+        "index.html"
+      ],
+      "role": "Static web platform shell and offline-ready assets.",
+      "allowedDependencies": []
+    },
+    {
+      "id": "L11",
+      "name": "verification",
+      "paths": [
+        "scripts/**",
+        ".github/workflows/**"
+      ],
+      "role": "Architecture, regression, benchmark and release evidence.",
+      "allowedDependencies": [
+        "contracts",
+        "domain-model",
+        "estimation",
+        "optimization",
+        "control-safety",
+        "orchestration",
+        "research-shadow",
+        "application"
+      ]
+    }
+  ],
+  "hardRules": [
+    {
+      "id": "ARCH-001",
+      "rule": "presentation-must-not-import-core",
+      "severity": "block"
+    },
+    {
+      "id": "ARCH-002",
+      "rule": "application-is-the-ui-core-boundary",
+      "severity": "block"
+    },
+    {
+      "id": "ARCH-003",
+      "rule": "no-layer-may-import-presentation-from-core",
+      "severity": "block"
+    },
+    {
+      "id": "ARCH-004",
+      "rule": "research-shadow-has-no-implicit-production-authority",
+      "severity": "block"
+    },
+    {
+      "id": "ARCH-005",
+      "rule": "production-requires-separate-explicit-release-gate",
+      "severity": "block"
+    }
+  ]
+}

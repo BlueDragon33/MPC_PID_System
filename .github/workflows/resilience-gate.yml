@@ -1,0 +1,74 @@
+name: MPC PID Resilience Gate
+
+on:
+  pull_request:
+    paths:
+      - ".blueprint/**"
+      - "public/**"
+      - "src/main.jsx"
+      - "src/application/persistence/**"
+      - "src/components/app/useWorkbenchController.js"
+      - "scripts/resilienceSmoke.mjs"
+      - ".github/workflows/resilience-gate.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  resilience:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Architecture boundary gate
+        run: node scripts/architectureCheck.mjs
+      - name: Recovery and PWA contract
+        run: node scripts/resilienceSmoke.mjs
+      - name: Build standalone web-app
+        run: npm run build -- --base=./
+      - name: Verify offline artifact contents
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f dist/sw.js
+          test -f dist/manifest.webmanifest
+          test -f dist/favicon.svg
+      - name: Offline browser recovery
+        shell: bash
+        run: |
+          set -euo pipefail
+          browser="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
+          if [[ -z "$browser" ]]; then
+            echo "::error::No Chromium-compatible browser is available on the runner."
+            exit 1
+          fi
+
+          npm run preview -- --host 127.0.0.1 --port 4173 >/tmp/mpc-preview.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+
+          for attempt in {1..30}; do
+            if curl -fsS http://127.0.0.1:4173/ >/dev/null; then
+              break
+            fi
+            sleep 0.5
+          done
+
+          rm -rf /tmp/mpc-browser-profile
+          "$browser"             --headless             --no-sandbox             --disable-gpu             --user-data-dir=/tmp/mpc-browser-profile             --virtual-time-budget=5000             --dump-dom             http://127.0.0.1:4173/ > /tmp/mpc-online.html
+
+          grep -q 'MPC-PID Control System' /tmp/mpc-online.html
+
+          kill "$server_pid"
+          wait "$server_pid" 2>/dev/null || true
+          trap - EXIT
+
+          "$browser"             --headless             --no-sandbox             --disable-gpu             --user-data-dir=/tmp/mpc-browser-profile             --virtual-time-budget=5000             --dump-dom             http://127.0.0.1:4173/ > /tmp/mpc-offline.html
+
+          grep -q 'MPC-PID Control System' /tmp/mpc-offline.html

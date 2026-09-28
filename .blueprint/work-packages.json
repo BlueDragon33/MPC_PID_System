@@ -1,0 +1,156 @@
+{
+  "schemaVersion": "1.0.0",
+  "projectId": "project:mpc-pid-system",
+  "rule": "At most one work package may be ACTIVE. A package may advance only with evidence and all required gates green.",
+  "packages": [
+    {
+      "id": "WP00",
+      "title": "Constitution + architecture authority",
+      "status": "PASS",
+      "dependsOn": [],
+      "gates": [
+        "constitution",
+        "architecture-manifest",
+        "architecture-check"
+      ],
+      "evidence": [
+        "project-profile",
+        "layer-map",
+        "work-package-ledger",
+        "PR#2 exact-head constitution+architecture+fast+migration gates"
+      ]
+    },
+    {
+      "id": "WP01",
+      "title": "Application boundary and UI decoupling",
+      "status": "PASS",
+      "dependsOn": [
+        "WP00"
+      ],
+      "gates": [
+        "presentation-no-core-imports",
+        "smoke",
+        "build"
+      ],
+      "evidence": [
+        "application-facade",
+        "architecture-check",
+        "application facade",
+        "presentation core-import removal",
+        "architecture checker",
+        "smoke+build migration gate"
+      ]
+    },
+    {
+      "id": "WP02",
+      "title": "Contracts and simulator decomposition",
+      "status": "PASS",
+      "dependsOn": [
+        "WP01"
+      ],
+      "gates": [
+        "contract-tests",
+        "simulation-regression"
+      ],
+      "evidence": [
+        "simulationConfig owns defaults and deterministic nested merge",
+        "simulationMetrics owns reporting and actual plant safety audit",
+        "simulator public API remains backward compatible",
+        "exact-head architecture + smoke + build gates green after each extraction",
+        "estimatorRuntime owns sensor/Kalman lifecycle and snapshot contract",
+        "mpcPlanRuntime owns warm-start, solver records and safe continuation plan",
+        "orchestrationContractSmoke passes on exact head",
+        "migration gate: architecture + contracts + smoke + build PASS"
+      ]
+    },
+    {
+      "id": "WP03",
+      "title": "Control/optimization dependency tightening",
+      "status": "PASS",
+      "dependsOn": [
+        "WP02"
+      ],
+      "gates": [
+        "core-layer-check",
+        "solver-regression",
+        "safety-regression"
+      ],
+      "evidence": [
+        "commandSafetyRuntime owns governed PID conditioning and emergency safety fallback",
+        "control-safety gate: layer check + smoke + full benchmark PASS",
+        "simulator no longer owns Safety Governor command logic"
+      ]
+    },
+    {
+      "id": "WP04",
+      "title": "Experiment/application services",
+      "status": "PASS",
+      "dependsOn": [
+        "WP03"
+      ],
+      "gates": [
+        "batch-determinism",
+        "serialization-roundtrip"
+      ],
+      "evidence": [
+        "core experiment serialization is pure data logic",
+        "browser persistence/download moved to application layer",
+        "workbench facade decomposed into simulation, experiment and research services",
+        "experiment services gate: roundtrip + matrix determinism + build PASS"
+      ]
+    },
+    {
+      "id": "WP05",
+      "title": "Presentation state and route isolation",
+      "status": "PASS",
+      "dependsOn": [
+        "WP04"
+      ],
+      "gates": [
+        "responsive-ui",
+        "accessibility",
+        "browser-regression"
+      ],
+      "evidence": [
+        "App reduced to accessible presentation shell",
+        "navigation/state moved to useWorkbenchController and navigation contract",
+        "presentation gate: route + accessibility + responsive + build + preview HTTP PASS"
+      ]
+    },
+    {
+      "id": "WP06",
+      "title": "Resilience, offline and recovery",
+      "status": "PASS",
+      "dependsOn": [
+        "WP05"
+      ],
+      "gates": [
+        "offline",
+        "restore",
+        "failure-mode"
+      ],
+      "evidence": [
+        "schema-versioned workbench recovery survives reload and rejects corrupt payloads",
+        "service worker caches app shell and loaded Vite assets",
+        "headless Chrome offline test PASS after preview server is stopped",
+        "standalone build contains service worker, manifest and favicon"
+      ]
+    },
+    {
+      "id": "WP07",
+      "title": "Release hardening and exact-head evidence",
+      "status": "QUEUED",
+      "dependsOn": [
+        "WP06"
+      ],
+      "gates": [
+        "release-mode",
+        "security",
+        "artifact",
+        "post-deploy-smoke"
+      ],
+      "evidence": [],
+      "requiresExplicitOwnerRelease": true
+    }
+  ]
+}

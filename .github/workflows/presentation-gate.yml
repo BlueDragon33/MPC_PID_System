@@ -1,0 +1,48 @@
+name: MPC PID Presentation Gate
+
+on:
+  pull_request:
+    paths:
+      - ".blueprint/**"
+      - "src/App.jsx"
+      - "src/components/**"
+      - "src/styles.css"
+      - "src/solverDiagnostics.css"
+      - "scripts/presentationContractSmoke.mjs"
+      - ".github/workflows/presentation-gate.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  presentation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Architecture boundary gate
+        run: node scripts/architectureCheck.mjs
+      - name: Route, accessibility and responsive contract
+        run: node scripts/presentationContractSmoke.mjs
+      - name: Build web-app
+        run: npm run build
+      - name: Preview web-shell regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run preview -- --host 127.0.0.1 --port 4173 >/tmp/mpc-preview.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for attempt in {1..20}; do
+            if curl -fsS http://127.0.0.1:4173/ >/tmp/mpc-home.html; then
+              break
+            fi
+            sleep 0.5
+          done
+          grep -q '<div id="root"></div>' /tmp/mpc-home.html

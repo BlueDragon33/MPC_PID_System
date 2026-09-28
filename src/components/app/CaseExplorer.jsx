@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { Activity, AlertTriangle, CheckCircle2, Cpu, Gauge, ShieldCheck, Zap } from 'lucide-react';
-import { compareExperimentCases } from '../../core/experiments/experimentMatrix.js';
+import { compareExperimentCases } from '../../application/workbench.js';
 import './caseExplorer.css';
 
 const fmt = (value, digits = 3) => Number.isFinite(value) ? value.toFixed(digits) : '—';
