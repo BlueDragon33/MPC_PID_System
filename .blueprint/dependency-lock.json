@@ -1,0 +1,21 @@
+{
+  "schemaVersion": "1.0.0",
+  "strategy": "generated-lock-hash",
+  "productionAuthority": false,
+  "nodeMajor": 22,
+  "expectedLockSha256": null,
+  "status": "bootstrap-required",
+  "exactTopLevelDependencies": {
+    "@vitejs/plugin-react": "6.1.1",
+    "vite": "8.3.1",
+    "typescript": "7.0.2",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "lucide-react": "1.48.0"
+  },
+  "rationale": [
+    "Repository release readiness must never resolve package.json latest ranges.",
+    "The generated npm lockfile is compared byte-for-byte by SHA-256 before npm ci/build.",
+    "A changed transitive resolution fails readiness until the lock blueprint is intentionally reviewed and updated."
+  ]
+}
