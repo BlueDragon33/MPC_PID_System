@@ -102,7 +102,7 @@
     {
       "id": "WP05",
       "title": "Presentation state and route isolation",
-      "status": "ACTIVE",
+      "status": "PASS",
       "dependsOn": [
         "WP04"
       ],
@@ -111,12 +111,16 @@
         "accessibility",
         "browser-regression"
       ],
-      "evidence": []
+      "evidence": [
+        "App reduced to accessible presentation shell",
+        "navigation/state moved to useWorkbenchController and navigation contract",
+        "presentation gate: route + accessibility + responsive + build + preview HTTP PASS"
+      ]
     },
     {
       "id": "WP06",
       "title": "Resilience, offline and recovery",
-      "status": "QUEUED",
+      "status": "ACTIVE",
       "dependsOn": [
         "WP05"
       ],
