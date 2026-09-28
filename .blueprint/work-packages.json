@@ -1,0 +1,123 @@
+{
+  "schemaVersion": "1.0.0",
+  "projectId": "project:mpc-pid-system",
+  "rule": "At most one work package may be ACTIVE. A package may advance only with evidence and all required gates green.",
+  "packages": [
+    {
+      "id": "WP00",
+      "title": "Constitution + architecture authority",
+      "status": "ACTIVE",
+      "dependsOn": [],
+      "gates": [
+        "constitution",
+        "architecture-manifest",
+        "architecture-check"
+      ],
+      "evidence": [
+        "project-profile",
+        "layer-map",
+        "work-package-ledger"
+      ]
+    },
+    {
+      "id": "WP01",
+      "title": "Application boundary and UI decoupling",
+      "status": "QUEUED",
+      "dependsOn": [
+        "WP00"
+      ],
+      "gates": [
+        "presentation-no-core-imports",
+        "smoke",
+        "build"
+      ],
+      "evidence": [
+        "application-facade",
+        "architecture-check"
+      ]
+    },
+    {
+      "id": "WP02",
+      "title": "Contracts and simulator decomposition",
+      "status": "QUEUED",
+      "dependsOn": [
+        "WP01"
+      ],
+      "gates": [
+        "contract-tests",
+        "simulation-regression"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "WP03",
+      "title": "Control/optimization dependency tightening",
+      "status": "QUEUED",
+      "dependsOn": [
+        "WP02"
+      ],
+      "gates": [
+        "core-layer-check",
+        "solver-regression",
+        "safety-regression"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "WP04",
+      "title": "Experiment/application services",
+      "status": "QUEUED",
+      "dependsOn": [
+        "WP03"
+      ],
+      "gates": [
+        "batch-determinism",
+        "serialization-roundtrip"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "WP05",
+      "title": "Presentation state and route isolation",
+      "status": "QUEUED",
+      "dependsOn": [
+        "WP04"
+      ],
+      "gates": [
+        "responsive-ui",
+        "accessibility",
+        "browser-regression"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "WP06",
+      "title": "Resilience, offline and recovery",
+      "status": "QUEUED",
+      "dependsOn": [
+        "WP05"
+      ],
+      "gates": [
+        "offline",
+        "restore",
+        "failure-mode"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "WP07",
+      "title": "Release hardening and exact-head evidence",
+      "status": "QUEUED",
+      "dependsOn": [
+        "WP06"
+      ],
+      "gates": [
+        "release-mode",
+        "security",
+        "artifact",
+        "post-deploy-smoke"
+      ],
+      "evidence": []
+    }
+  ]
+}
