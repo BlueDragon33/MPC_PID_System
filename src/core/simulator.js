@@ -7,11 +7,7 @@ import {
   equivalentDisturbance,
   stepSecondOrderPlant,
 } from './models/secondOrderPlant.js';
-import {
-  computeAdmissibleCommandInterval,
-  computePhysicalCommandInterval,
-  applySafetyGovernor,
-} from './safety/shortHorizonGovernor.js';
+import { computeGovernedPidCommand } from './safety/commandSafetyRuntime.js';
 import { evaluateEventTrigger } from './triggers/eventTrigger.js';
 import { defaultConfig, mergeSimulationConfig } from './orchestration/simulationConfig.js';
 import { computeSimulationMetrics, safetyViolationAt } from './orchestration/simulationMetrics.js';
@@ -144,51 +140,20 @@ export function runSimulation(mode, userConfig = {}) {
       }
 
       if (governorMode) {
-        const interval = computeAdmissibleCommandInterval(controllerState, previousU, controlCfg, mpcPlanRuntime.getContinuationSequence());
-        const baseInterval = interval.baseInterval ?? computePhysicalCommandInterval(previousU, controlCfg);
-        const pidResult = pid.updateDetailed(reference, controllerState.x, interval.feasible ? interval : null);
-        pidRaw = pidResult.raw;
-        pidNominal = clamp(pidResult.raw, controlCfg.pid.uMin, controlCfg.pid.uMax);
-        pidConditioned = baseInterval.feasible
-          ? clamp(pidNominal, baseInterval.lower, baseInterval.upper)
-          : pidNominal;
-        const conditioningCorrection = pidConditioned - pidNominal;
-
-        if (interval.feasible) {
-          u = pidResult.u;
-          const safetyCorrection = u - pidConditioned;
-          governor = {
-            feasible: true,
-            emergencyFallback: false,
-            intervened: Math.abs(safetyCorrection) > 1e-12,
-            conditioned: Math.abs(conditioningCorrection) > 1e-12,
-            correction: safetyCorrection,
-            conditioningCorrection,
-            reason: Math.abs(safetyCorrection) > 1e-12
-              ? 'safety-envelope-limited-command'
-              : Math.abs(conditioningCorrection) > 1e-12
-                ? 'actuator-plan-conditioned-command'
-                : 'proposal-admissible',
-            interval,
-          };
-        } else {
-          governor = applySafetyGovernor({
-            state: controllerState,
-            proposedU: pidConditioned,
-            previousU,
-            lastMpcSafeU: mpcPlanRuntime.getLastSafeU(),
-            continuationSequence: mpcPlanRuntime.getContinuationSequence(),
-            cfg: controlCfg,
-          });
-          governor = {
-            ...governor,
-            intervened: true,
-            conditioned: Math.abs(conditioningCorrection) > 1e-12,
-            correction: governor.u - pidConditioned,
-            conditioningCorrection,
-          };
-          u = governor.u;
-        }
+        const governed = computeGovernedPidCommand({
+          pid,
+          reference,
+          controllerState,
+          previousU,
+          cfg: controlCfg,
+          continuationSequence: mpcPlanRuntime.getContinuationSequence(),
+          lastMpcSafeU: mpcPlanRuntime.getLastSafeU(),
+        });
+        u = governed.u;
+        pidRaw = governed.pidRaw;
+        pidNominal = governed.pidNominal;
+        pidConditioned = governed.pidConditioned;
+        governor = governed.governor;
       } else {
         u = pid.update(reference, controllerState.x);
       }
