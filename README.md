@@ -204,6 +204,26 @@ compute/step:            ~10.03 us on CI runner
 
 Hard thrust/torque bounds and the actual safety envelope are audited explicitly. This timing is simulation evidence only, not a hardware real-time claim.
 
+### Nonlinear UAV planar EKF estimation
+
+Gate 5E adds deterministic noisy measurements and a 6-state EKF for `[x, z, theta, vx, vz, q]`. When enabled, the cascaded controller consumes the estimate only; ground truth stays reserved for plant propagation and audit.
+
+Representative CI regression:
+
+```text
+measurement RMSE x/z/theta/vx/vz/q:
+0.08119 / 0.05865 / 0.01488 / 0.07995 / 0.07009 / 0.03922
+
+EKF RMSE x/z/theta/vx/vz/q:
+0.01318 / 0.00991 / 0.00305 / 0.02637 / 0.02368 / 0.01920
+
+estimated-state x/z RMSE: 0.2200 / 0.0721 m
+unsafe samples:           0
+average covariance trace: 0.003410
+```
+
+Same-seed traces are exactly reproducible and a different seed changes the noisy closed-loop trajectory. Gate 5F will compare the estimated-state classical baseline against a constrained predictive UAV layer; it is not yet classified as NMPC.
+
 ### Reproducible experiments
 
 Preset hiện có gồm:
@@ -270,7 +290,8 @@ src/core/
 - UGV nonlinear state estimation — PASS
 - UGV constrained predictive control comparison — PASS
 - UAV planar/attitude classical baseline — PASS
-- **UAV planar nonlinear state estimation — NEXT**
+- UAV planar nonlinear state estimation — PASS
+- **UAV planar constrained predictive comparison — NEXT**
 - USV planar model — LATER
 - NMPC — LATER
 - Adaptive / Learning MPC — LATER
