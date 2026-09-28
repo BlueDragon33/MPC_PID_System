@@ -42,7 +42,7 @@ export const defaultUgvConfig = Object.freeze({
     initialVariance: [0.12, 0.12, 0.03, 0.3],
   },
   ugvLtvMpc: {
-    horizon: 14,
+    horizon: 6,
     solveInterval: 0.10,
     predictionDt: 0.10,
     qLateral: 16,
