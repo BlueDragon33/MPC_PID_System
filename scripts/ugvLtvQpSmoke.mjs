@@ -20,6 +20,14 @@ assert(qp.H.flat().every(Number.isFinite));
 assert(qp.f.every(Number.isFinite));
 
 const result = solveUgvLtvMpc(state, previousCommand, cfg);
+console.log('UGV LTV QP diagnostic', {
+  status: result.status,
+  fallbackUsed: result.fallbackUsed,
+  solveMs: result.solveMs,
+  diagnostics: result.diagnostics,
+  firstDecision: result.sequence?.slice(0, 4),
+  zeroSeedViolation: inequalityViolation(qp.inequalities, new Array(dimension).fill(0)),
+});
 assert(['solved', 'max-iterations'].includes(result.status), `UGV LTV QP status=${result.status}`);
 assert.equal(result.fallbackUsed, false);
 assert(Number.isFinite(result.command.acceleration));
