@@ -1,0 +1,68 @@
+name: MPC PID Gate 4B Closeout
+
+on:
+  pull_request:
+    paths:
+      - "src/core/**"
+      - "scripts/gate4bCloseout.mjs"
+      - "scripts/disturbance*.mjs"
+      - "scripts/modelMismatchObserverSmoke.mjs"
+      - "scripts/affineDisturbanceQPSmoke.mjs"
+      - "scripts/mpcDisturbanceCompensationProbe.mjs"
+      - "docs/RESEARCH_DIRECTION.md"
+      - "README.md"
+      - ".github/workflows/gate4b-closeout.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  gate4b:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Resolve approved dependency graph
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f package-lock.json
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+          actual="$(sha256sum package-lock.json | awk '{print $1}')"
+          expected="$(node -e "const p=require('./.blueprint/dependency-lock.json'); process.stdout.write(p.expectedLockSha256 || '')")"
+          if [[ "$actual" != "$expected" ]]; then
+            echo "::error::Dependency graph drift. Expected $expected, got $actual"
+            exit 1
+          fi
+          npm ci --no-audit --no-fund
+
+      - name: Architecture boundary gate
+        run: node scripts/architectureCheck.mjs
+
+      - name: Gate 4B closeout regression
+        run: node scripts/gate4bCloseout.mjs
+
+      - name: Disturbance observer regression
+        run: |
+          node scripts/disturbanceEstimationSmoke.mjs
+          node scripts/modelMismatchObserverSmoke.mjs
+          node scripts/disturbancePredictionMonitorSmoke.mjs
+
+      - name: Affine prediction regression
+        run: |
+          node scripts/affineDisturbanceQPSmoke.mjs
+          node scripts/mpcDisturbanceCompensationProbe.mjs
+          node scripts/disturbanceCompensationMatrix.mjs
+
+      - name: Full control smoke
+        run: npm run smoke
+
+      - name: Full research benchmark
+        run: npm run benchmark
+
+      - name: Web-app build
+        run: npm run build -- --base=./
