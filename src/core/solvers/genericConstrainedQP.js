@@ -117,14 +117,19 @@ export function solveGenericConstrainedQP(qp, options = {}, warmStart = null) {
     stepScale: Math.max(1e-4, options.stepScale ?? 0.9),
   };
 
-  const seed = warmStart?.length === dimension
-    ? [...warmStart]
-    : new Array(dimension).fill(0);
-  const seedFeasibility = inequalityViolation(qp.inequalities, seed);
-  const seedAnchor = seedFeasibility.maxViolation <= opts.feasibilityTolerance ? [...seed] : null;
-  const initial = project(qp, seed, opts, seedAnchor);
+  const zeroSeed = new Array(dimension).fill(0);
+  const seed = warmStart?.length === dimension ? [...warmStart] : [...zeroSeed];
+  const candidateAnchors = [
+    seed,
+    options.feasibleSeed?.length === dimension ? [...options.feasibleSeed] : null,
+    zeroSeed,
+  ].filter(Boolean);
+  const feasibleSeed = candidateAnchors.find(
+    (candidate) => inequalityViolation(qp.inequalities, candidate).maxViolation <= opts.feasibilityTolerance,
+  ) ?? null;
+  const initial = project(qp, seed, opts, feasibleSeed);
   let x = initial.x;
-  let feasibleAnchor = initial.maxViolation <= opts.feasibilityTolerance ? [...x] : seedAnchor;
+  let feasibleAnchor = initial.maxViolation <= opts.feasibilityTolerance ? [...x] : feasibleSeed;
   let anchorRepairs = initial.anchorRepairUsed ? 1 : 0;
 
   if (initial.maxViolation > opts.feasibilityTolerance * 10) {
