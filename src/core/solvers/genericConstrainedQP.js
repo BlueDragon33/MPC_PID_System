@@ -151,6 +151,9 @@ export function solveGenericConstrainedQP(qp, options = {}, warmStart = null) {
 
   const lipschitz = maxRowAbsSum(qp.H);
   const step = opts.stepScale / lipschitz;
+  let y = [...x];
+  let momentum = 1;
+  let restarts = 0;
   let residualInfo = projectedGradientResidual(qp, x, step, opts);
   let feasibility = inequalityViolation(qp.inequalities, x);
   let converged = residualInfo.residual <= opts.tolerance
@@ -160,11 +163,18 @@ export function solveGenericConstrainedQP(qp, options = {}, warmStart = null) {
   let previousObjective = objective(qp, x);
 
   for (let iter = 1; iter <= opts.maxIterations && !converged; iter += 1) {
-    const g = gradient(qp, x);
-    const projected = project(qp, x.map((value, i) => value - step * g[i]), opts);
+    const previousX = [...x];
+    const g = gradient(qp, y);
+    let projected = project(
+      qp,
+      y.map((value, i) => value - step * g[i]),
+      opts,
+      feasibleAnchor,
+    );
     projectionCycles += projected.cycles;
-    const candidate = projected.x;
-    const candidateObjective = objective(qp, candidate);
+    if (projected.anchorRepairUsed) anchorRepairs += 1;
+    let candidate = projected.x;
+    let candidateObjective = objective(qp, candidate);
 
     if (!candidate.every(Number.isFinite) || !Number.isFinite(candidateObjective)) {
       return {
@@ -182,11 +192,34 @@ export function solveGenericConstrainedQP(qp, options = {}, warmStart = null) {
       };
     }
 
+    if (candidateObjective > previousObjective + 1e-12) {
+      const restartGradient = gradient(qp, previousX);
+      projected = project(
+        qp,
+        previousX.map((value, i) => value - step * restartGradient[i]),
+        opts,
+        feasibleAnchor,
+      );
+      projectionCycles += projected.cycles;
+      if (projected.anchorRepairUsed) anchorRepairs += 1;
+      candidate = projected.x;
+      candidateObjective = objective(qp, candidate);
+      y = [...previousX];
+      momentum = 1;
+      restarts += 1;
+    }
+
     x = candidate;
     if (inequalityViolation(qp.inequalities, x).maxViolation <= opts.feasibilityTolerance) {
       feasibleAnchor = [...x];
     }
+
+    const nextMomentum = 0.5 * (1 + Math.sqrt(1 + 4 * momentum * momentum));
+    const beta = (momentum - 1) / nextMomentum;
+    y = x.map((value, i) => value + beta * (value - previousX[i]));
+    momentum = nextMomentum;
     previousObjective = candidateObjective;
+
     residualInfo = projectedGradientResidual(qp, x, step, opts);
     projectionCycles += residualInfo.projection.cycles;
     feasibility = inequalityViolation(qp.inequalities, x);
@@ -219,6 +252,7 @@ export function solveGenericConstrainedQP(qp, options = {}, warmStart = null) {
       stepSize: step,
       finite: x.every(Number.isFinite) && Number.isFinite(previousObjective),
       anchorRepairs,
+      restarts,
     },
   };
 }
