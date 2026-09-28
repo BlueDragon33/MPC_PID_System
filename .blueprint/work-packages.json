@@ -52,7 +52,12 @@
         "contract-tests",
         "simulation-regression"
       ],
-      "evidence": []
+      "evidence": [
+        "simulationConfig owns defaults and deterministic nested merge",
+        "simulationMetrics owns reporting and actual plant safety audit",
+        "simulator public API remains backward compatible",
+        "exact-head architecture + smoke + build gates green after each extraction"
+      ]
     },
     {
       "id": "WP03",
