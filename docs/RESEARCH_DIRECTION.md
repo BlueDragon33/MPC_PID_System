@@ -163,25 +163,86 @@ MPC/Governor dùng envelope đã co. Actual plant safety vẫn được chấm t
 
 Sensitivity cho thấy tăng sigma không đơn điệu tốt hơn: 2σ trở lên bắt đầu gây solver fallback trong benchmark hiện tại, 3σ còn có thể làm tracking/safety xấu đi do quá bảo thủ. Vì vậy 1.5σ hiện là preset nghiên cứu, không phải hằng số phổ quát.
 
-### Gate 4B — Model mismatch + disturbance-state estimation — ACTIVE
+### Gate 4B — Model mismatch + disturbance-state estimation — PASS
 
-Câu hỏi nghiên cứu kế tiếp:
+Gate 4B đã được khóa bằng regression tổng hợp `mpc-pid-gate4b-closeout/v1` và workflow riêng.
 
-> Khi plant thật lệch mô hình hoặc chịu disturbance không đo trực tiếp, chỉ Kalman 2-state có đủ cho Event MPC + PID + Governor không?
+Đã chứng minh:
 
-Thứ tự bắt buộc:
+1. truth-plant parameters tách khỏi controller model,
+2. model mismatch được benchmark khi controller không biết mismatch,
+3. augmented disturbance state `d_hat` chạy trong closed loop,
+4. 2-state KF và augmented `x-v-d` observer được so sánh trên cùng scenario,
+5. same-seed trace tái lập chính xác measurement / estimate / command / trigger,
+6. Event Monitor chỉ dùng `d_hat` sau khi observer regression PASS,
+7. affine disturbance compensation đã đi vào condensed QP dưới dạng free-response offset, không bị giả thành control input,
+8. actual plant safety, solver feasibility và fallback semantics vẫn được audit riêng.
 
-1. tạo plant-truth parameters tách khỏi controller model,
-2. benchmark model mismatch khi controller không biết mismatch,
-3. thêm augmented disturbance state `d_hat`,
-4. so sánh 2-state KF với augmented disturbance observer/KF,
-5. cho prediction dùng disturbance estimate chỉ sau khi observer chứng minh có lợi,
-6. đo IAE, RMSE, solve density, fallback, safety và disturbance-estimation lag,
-7. giữ deterministic seed + reproducible experiment.
+Closeout scenario đại diện:
 
-Không dùng EKF/UKF ở đây vì plant vẫn tuyến tính. Chỉ chuyển EKF/UKF khi Gate 5 nonlinear plant bắt đầu.
+```text
+2-state mismatch:
+  IAE:          1.6244
+  MPC solves:   28
+  x-hat RMSE:   0.0383
+  v-hat RMSE:   0.1674
 
-### Gate 5 — Nonlinear plants
+x-v-d observer + d-hat Event Monitor:
+  IAE:          1.6278
+  MPC solves:   29
+  x-hat RMSE:   0.0368
+  v-hat RMSE:   0.1606
+  d-hat RMSE:   0.4673
+  convergence:  100%
+  fallback:     0
+  plant safety: 0
+```
+
+Standalone disturbance-estimation regression trên pulse đã biết:
+
+```text
+d-hat RMSE:        0.1209
+active mean d-hat: 1.1642   (truth 1.15)
+quiet mean |d-hat|:0.0844
+x-hat RMSE:        0.0148
+v-hat RMSE:        0.0901
+```
+
+Disturbance-aware Event Monitor:
+
+```text
+prediction-error triggers: 3 → 1
+MPC solves:                30 → 29
+average prediction error:  0.01605 → 0.01598
+IAE ratio ON/OFF:          1.0004
+fallback:                  0
+plant violation:           0
+```
+
+Affine disturbance compensation trong MPC horizon cũng PASS feasibility/safety:
+
+```text
+additive-only @ feasible frontier 0.80:
+  IAE OFF/ON: 1.4577 / 1.4548
+
+parameter-only:
+  IAE OFF/ON: 2.3774 / 2.3760
+
+combined:
+  IAE OFF/ON: 1.6278 / 1.6277
+
+all cases:
+  convergence: 100%
+  fallback:    0
+  infeasible:  0
+  plant safety violation: 0
+```
+
+Kết luận Gate 4B: `d_hat` có giá trị rõ nhất ở **prediction monitor / model residual explanation**; affine MPC horizon compensation hiện an toàn nhưng lợi ích tracking/compute còn rất nhỏ trên linear plant hiện tại. Vì vậy `mismatch-observer` bật disturbance-aware Event Monitor, còn `mpcDisturbanceCompensationEnabled` vẫn **opt-in**. Không overclaim đây là lợi ích phổ quát.
+
+Không dùng EKF/UKF ở Gate 4B vì plant vẫn tuyến tính.
+
+### Gate 5 — Nonlinear plants — NEXT
 
 Thứ tự:
 1. UGV bicycle model.
@@ -242,22 +303,26 @@ PASS khi:
 
 ## Milestone hiện tại
 
-**Gate 4B — Model mismatch + disturbance-state estimation**
+**Gate 5 — Nonlinear plants — NEXT**
+
+Thứ tự triển khai bắt buộc:
 
 ```text
-nominal model PASS
+Gate 4B linear mismatch/disturbance PASS
       ↓
-separate truth model
+UGV bicycle model
       ↓
-controlled model mismatch benchmark
+linear/classical baseline on nonlinear plant
       ↓
-augmented disturbance state
+state estimation suitable for nonlinear model
       ↓
-d_hat estimation regression
+constrained predictive control comparison
       ↓
-optional prediction compensation
+UAV planar / attitude model
       ↓
-safety + compute + tracking comparison
+USV planar model
 ```
+
+Không nhảy thẳng vào full 6-DOF UAV hoặc NMPC trước khi UGV bicycle model có baseline, reproducible scenario, safety audit và compute metrics.
 
 External OSQP/WASM backend vẫn chỉ được thêm khi benchmark cho thấy solver hiện tại là bottleneck hoặc cần backend độc lập để đối chiếu numerical correctness ở constraint scale lớn hơn.
