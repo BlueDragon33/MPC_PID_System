@@ -44,7 +44,7 @@
     {
       "id": "WP02",
       "title": "Contracts and simulator decomposition",
-      "status": "ACTIVE",
+      "status": "PASS",
       "dependsOn": [
         "WP01"
       ],
@@ -56,13 +56,17 @@
         "simulationConfig owns defaults and deterministic nested merge",
         "simulationMetrics owns reporting and actual plant safety audit",
         "simulator public API remains backward compatible",
-        "exact-head architecture + smoke + build gates green after each extraction"
+        "exact-head architecture + smoke + build gates green after each extraction",
+        "estimatorRuntime owns sensor/Kalman lifecycle and snapshot contract",
+        "mpcPlanRuntime owns warm-start, solver records and safe continuation plan",
+        "orchestrationContractSmoke passes on exact head",
+        "migration gate: architecture + contracts + smoke + build PASS"
       ]
     },
     {
       "id": "WP03",
       "title": "Control/optimization dependency tightening",
-      "status": "QUEUED",
+      "status": "ACTIVE",
       "dependsOn": [
         "WP02"
       ],
