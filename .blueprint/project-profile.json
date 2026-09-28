@@ -1,0 +1,38 @@
+{
+  "schemaVersion": "1.0.0",
+  "projectId": "project:mpc-pid-system",
+  "name": "MPC_PID_System",
+  "classification": "B3_RESEARCH_CONTROL_PLATFORM",
+  "constitution": {
+    "policyId": "blueprint-os:universal-century-grade",
+    "policyVersion": "1.1.0",
+    "enforcement": "mandatory-all-projects"
+  },
+  "mission": "Research-grade local-first web-app for layered MPC/PID, estimation, safety, experiment orchestration and bounded adaptive-control research.",
+  "operatingMode": "development-live",
+  "releaseAuthority": "separate-explicit-release-gate",
+  "architectureStyle": "layered-contract-first",
+  "sourceOfTruth": [
+    ".blueprint/constitution-adoption.json",
+    ".blueprint/project-profile.json",
+    ".blueprint/architecture.json",
+    ".blueprint/work-packages.json",
+    "docs/ARCHITECTURE.md",
+    "docs/RESEARCH_DIRECTION.md"
+  ],
+  "pillars": [
+    "structural-capacity",
+    "architectural-longevity",
+    "product-elegance",
+    "premium-usability",
+    "long-term-durability",
+    "fortress-security-disaster-resilience"
+  ],
+  "invariants": [
+    "UI never imports control-core modules directly; it goes through the application boundary.",
+    "Ground truth is simulator/audit data only when estimation is enabled.",
+    "Predicted feasibility and actual plant safety remain separate evidence.",
+    "Adaptive models remain shadow-only until a dedicated promote-and-rollback gate passes.",
+    "Production authority is never inferred from Constitution, CI, merge or development publish."
+  ]
+}
