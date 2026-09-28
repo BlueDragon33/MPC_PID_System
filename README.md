@@ -222,7 +222,30 @@ unsafe samples:           0
 average covariance trace: 0.003410
 ```
 
-Same-seed traces are exactly reproducible and a different seed changes the noisy closed-loop trajectory. Gate 5F will compare the estimated-state classical baseline against a constrained predictive UAV layer; it is not yet classified as NMPC.
+Same-seed traces are exactly reproducible and a different seed changes the noisy closed-loop trajectory.
+
+
+### UAV planar constrained predictive governor
+
+Gate 5F compares the EKF-driven classical UAV controller with a finite-candidate predictive policy-offset governor using nonlinear planar UAV rollouts and explicit safety constraints.
+
+Representative A/B:
+
+```text
+x RMSE:                 0.22000 → 0.21934 m
+z RMSE:                 0.07212 → 0.07874 m
+vx RMSE:                0.17554 → 0.17398 m/s
+vz RMSE:                0.06235 → 0.05311 m/s
+attitude tracking RMSE: 0.01937 → 0.01910 rad
+control effort:         0.01063 → 0.00782
+unsafe samples:         0 → 0
+compute/step:           119.24 → 156.22 us
+predicted feasible:     100%
+fallback:               0
+```
+
+The trade-off is intentionally recorded: altitude RMSE degrades by about 9.18% while control effort drops by about 26.5% and runner compute cost rises by about 31%. This layer is **not NMPC** because it does not optimize a full nonlinear control sequence and has no NLP solver/warm-start contract.
+
 
 ### Reproducible experiments
 
@@ -291,8 +314,8 @@ src/core/
 - UGV constrained predictive control comparison — PASS
 - UAV planar/attitude classical baseline — PASS
 - UAV planar nonlinear state estimation — PASS
-- **UAV planar constrained predictive comparison — NEXT**
-- USV planar model — LATER
+- UAV planar constrained predictive comparison — PASS
+- **USV planar nonlinear classical baseline — NEXT**
 - NMPC — LATER
 - Adaptive / Learning MPC — LATER
 - HIL / hardware timing validation — LATER
