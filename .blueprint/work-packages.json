@@ -313,7 +313,7 @@
     {
       "id": "RWP05F",
       "title": "Gate 5F — constrained predictive control comparison on nonlinear planar UAV",
-      "status": "QUEUED",
+      "status": "ACTIVE",
       "dependsOn": [
         "RWP05E"
       ],
