@@ -258,7 +258,7 @@
     {
       "id": "RWP05D",
       "title": "Gate 5D — UAV planar/attitude nonlinear classical baseline",
-      "status": "QUEUED",
+      "status": "ACTIVE",
       "dependsOn": [
         "RWP05C"
       ],
