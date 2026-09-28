@@ -3,6 +3,7 @@ import { createUgvExtendedKalmanFilter } from '../estimation/ugvExtendedKalmanFi
 import {
   createUgvInitialState,
   normalizeAngle,
+  saturateUgvCommand,
   stepKinematicBicycle,
 } from '../models/kinematicBicycle.js';
 import {
@@ -48,6 +49,7 @@ export function runUgvSimulation(mode, userConfig = {}) {
   let controllerState = estimateSnapshot?.state ?? { ...truth };
   let previousCommand = { acceleration: 0, steering: 0 };
   let appliedCommand = { ...previousCommand };
+  let targetCommand = { ...previousCommand };
   let warmStart = null;
   let lastSolveStep = -Infinity;
   const solveEverySteps = Math.max(1, Math.round(cfg.ugvLtvMpc.solveInterval / cfg.dt));
@@ -64,22 +66,23 @@ export function runUgvSimulation(mode, userConfig = {}) {
 
     if (mode === UGV_CONTROLLER_MODES.CLASSICAL) {
       controllerInfo = classical.update(controllerState);
-      appliedCommand = controllerInfo.command;
+      targetCommand = controllerInfo.command;
+      appliedCommand = targetCommand;
     } else if (k === 0 || k - lastSolveStep >= solveEverySteps) {
       const solution = solveUgvLtvMpc(
         controllerState,
         previousCommand,
         cfg,
         warmStart,
-        Number.isFinite(lastSolveStep) ? Math.max(1, k - lastSolveStep) : 1,
+        1,
       );
       warmStart = solution.sequence;
       solverRecords.push(solverRecord(solution, t));
       solverStatus = solution.status;
       fallbackUsed = solution.fallbackUsed;
-      appliedCommand = fallbackUsed ? classicalShadow.command : solution.command;
+      targetCommand = fallbackUsed ? classicalShadow.command : solution.command;
       controllerInfo = {
-        command: appliedCommand,
+        command: targetCommand,
         reference: solution.reference,
         error: solution.error,
       };
@@ -92,6 +95,10 @@ export function runUgvSimulation(mode, userConfig = {}) {
         reference,
         error: ugvTrackingErrors(controllerState, reference),
       };
+    }
+
+    if (mode === UGV_CONTROLLER_MODES.LTV_MPC) {
+      appliedCommand = saturateUgvCommand(targetCommand, previousCommand, cfg);
     }
 
     const truthSafety = ugvSafetyViolation(truth, cfg);
