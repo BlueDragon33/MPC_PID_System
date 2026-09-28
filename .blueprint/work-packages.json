@@ -286,7 +286,7 @@
     {
       "id": "RWP05E",
       "title": "Gate 5E — UAV planar nonlinear state estimation",
-      "status": "ACTIVE",
+      "status": "PASS",
       "dependsOn": [
         "RWP05D"
       ],
@@ -296,6 +296,34 @@
         "deterministic-noise",
         "closed-loop-estimation",
         "safety-audit"
+      ],
+      "evidence": [
+        "deterministic noisy planar UAV measurements for [x,z,theta,vx,vz,q]",
+        "6-state EKF with nonlinear planar-UAV prediction, analytic Jacobian and wrapped attitude innovation",
+        "sequential Joseph-form covariance update; controller consumes estimated state only and truth remains plant/audit data",
+        "same-seed measurement/estimate/command trace is exact; different seed changes the closed-loop trace",
+        "measurement RMSE x/z/theta/vx/vz/q = 0.08119/0.05865/0.01488/0.07995/0.07009/0.03922",
+        "EKF RMSE x/z/theta/vx/vz/q = 0.01318/0.00991/0.00305/0.02637/0.02368/0.01920",
+        "estimated-state tracking remains close to truth-state baseline; unsafe samples 0; average covariance trace 0.003410",
+        "Gate 5E workflow run #1 + full smoke + full benchmark + web build PASS on implementation head 08cb866fc54024853bcd403efa63a6074375238d",
+        "Release Readiness run #61 PASS on implementation head, including online/offline browser candidate smoke"
+      ],
+      "productionAuthority": false
+    },
+    {
+      "id": "RWP05F",
+      "title": "Gate 5F — constrained predictive control comparison on nonlinear planar UAV",
+      "status": "QUEUED",
+      "dependsOn": [
+        "RWP05E"
+      ],
+      "gates": [
+        "nonlinear-uav-prediction-contract",
+        "classical-baseline-comparison",
+        "constraint-feasibility",
+        "safety-audit",
+        "compute-quality-comparison",
+        "deterministic-regression"
       ],
       "evidence": [],
       "productionAuthority": false
