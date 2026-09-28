@@ -1,4 +1,5 @@
 import { createUGVPathFollower } from '../controllers/ugvPathFollower.js';
+import { createUGVPredictiveGovernor } from '../controllers/ugvPredictiveGovernor.js';
 import { createUGVBicycleEkf } from '../estimation/ugvBicycleEkf.js';
 import { createUGVMeasurementSensor } from '../estimation/ugvMeasurementSensor.js';
 import { createBicycleConfig, stepKinematicBicycle, wrapAngle } from '../models/kinematicBicycle.js';
@@ -15,6 +16,17 @@ export const defaultUGVScenario={
     processCovariance:[2e-4,2e-4,2e-5,3e-4],
     initialCovariance:[0.3,0.3,0.08,0.2],
   },
+  predictive:{
+    enabled:false,
+    horizon:10,
+    predictionDt:0.08,
+    qCrossTrack:8,
+    qHeading:3,
+    qSpeed:0.7,
+    rSteer:0.12,
+    rAccel:0.03,
+    rProposal:0.22,
+  },
   safety:{maxAbsCrossTrack:1.25,maxAbsHeadingError:0.8}
 };
 const sq=x=>x*x;
@@ -28,6 +40,7 @@ function merge(cfg={}){
       ...defaultUGVScenario.estimation,...(cfg.estimation||{}),
       noiseStd:{...defaultUGVScenario.estimation.noiseStd,...(cfg.estimation?.noiseStd||{})},
     },
+    predictive:{...defaultUGVScenario.predictive,...(cfg.predictive||{})},
     safety:{...defaultUGVScenario.safety,...(cfg.safety||{})}
   };
 }
@@ -40,6 +53,14 @@ export function ugvPathReference(x,cfg){
 export function runUGVBicycleBaseline(userCfg={}){
   const cfg=merge(userCfg); createBicycleConfig({...cfg.plant,dt:cfg.dt});
   const controller=createUGVPathFollower({...cfg.controller,...cfg.plant,dt:cfg.dt});
+  const predictiveEnabled=Boolean(cfg.predictive.enabled);
+  const predictiveGovernor=predictiveEnabled?createUGVPredictiveGovernor({
+    ...cfg.predictive,
+    ...cfg.plant,
+    ...cfg.safety,
+    dt:cfg.dt,
+  }):null;
+  let previousCommand={steer:0,accel:0};
   let state={x:0,y:0.65,yaw:0,v:0};
   const estimationEnabled=Boolean(cfg.estimation.enabled);
   const sensor=estimationEnabled?createUGVMeasurementSensor({
@@ -64,13 +85,37 @@ export function runUGVBicycleBaseline(userCfg={}){
 
   let prevSteer=0; const samples=[]; const steps=Math.floor(cfg.duration/cfg.dt);
   let sumCte2=0,sumHeading2=0,sumSpeed2=0,sumEffort=0,maxCte=0,maxHeading=0,maxSteerRate=0,unsafe=0;
+  let predictiveSolveMsSum=0,predictiveSolveMsMax=0,predictiveFeasibleCount=0,predictiveFallbackCount=0,predictiveInterventions=0;
+  let predictedMaxCrossTrack=0,predictedMaxHeadingError=0;
   let measurementError2={x:0,y:0,yaw:0,v:0},estimateError2={x:0,y:0,yaw:0,v:0},covarianceTraceSum=0;
   const start=performance.now();
   for(let k=0;k<=steps;k++){
     const t=k*cfg.dt;
     const controlRef=ugvPathReference(controllerState.x,cfg);
-    const cmd=controller.update(controllerState,controlRef);
+    const proposal=controller.update(controllerState,controlRef);
+    let predictiveDiagnostics=null;
+    let cmd=proposal;
+    if(predictiveEnabled){
+      const selected=predictiveGovernor.select({
+        state:controllerState,
+        proposal,
+        previousCommand,
+        referenceAt:(x)=>ugvPathReference(x,cfg),
+        plantCfg:cfg.plant,
+      });
+      cmd=selected.command;
+      predictiveDiagnostics=selected.diagnostics;
+      predictiveSolveMsSum+=predictiveDiagnostics.solveMs;
+      predictiveSolveMsMax=Math.max(predictiveSolveMsMax,predictiveDiagnostics.solveMs);
+      if(predictiveDiagnostics.predictedFeasible) predictiveFeasibleCount+=1;
+      if(predictiveDiagnostics.fallbackUsed) predictiveFallbackCount+=1;
+      if(Math.abs(cmd.steer-proposal.steer)>1e-12 || Math.abs(cmd.accel-proposal.accel)>1e-12) predictiveInterventions+=1;
+      predictedMaxCrossTrack=Math.max(predictedMaxCrossTrack,predictiveDiagnostics.predictedMaxCrossTrack??0);
+      predictedMaxHeadingError=Math.max(predictedMaxHeadingError,predictiveDiagnostics.predictedMaxHeadingError??0);
+    }
+    controller.syncAppliedSteer(cmd.steer);
     const steerRate=(cmd.steer-prevSteer)/cfg.dt; prevSteer=cmd.steer;
+    previousCommand={...cmd};
 
     const auditRef=ugvPathReference(state.x,cfg);
     const headingError=wrapAngle(auditRef.heading-state.yaw);
@@ -98,6 +143,16 @@ export function runUGVBicycleBaseline(userCfg={}){
       controllerX:controllerState.x,controllerY:controllerState.y,controllerYaw:controllerState.yaw,controllerV:controllerState.v,
       refY:auditRef.y,refHeading:auditRef.heading,refSpeed:auditRef.speed,
       cte,headingError,speedError,steer:cmd.steer,accel:cmd.accel,steerRate,safetyViolation,
+      proposalSteer:proposal.steer,proposalAccel:proposal.accel,
+      predictiveEnabled,
+      predictiveFeasible:predictiveDiagnostics?.predictedFeasible??null,
+      predictiveFallbackUsed:predictiveDiagnostics?.fallbackUsed??false,
+      predictiveCost:predictiveDiagnostics?.cost??null,
+      predictiveSolveMs:predictiveDiagnostics?.solveMs??null,
+      predictedMaxCrossTrack:predictiveDiagnostics?.predictedMaxCrossTrack??null,
+      predictedMaxHeadingError:predictiveDiagnostics?.predictedMaxHeadingError??null,
+      predictiveCandidateCount:predictiveDiagnostics?.candidateCount??null,
+      predictiveFeasibleCount:predictiveDiagnostics?.feasibleCount??null,
       estimationEnabled,
       measurementX:measurement?.x??null,measurementY:measurement?.y??null,measurementYaw:measurement?.yaw??null,measurementV:measurement?.v??null,
       covarianceTrace:estimationEnabled?(estimate.diagnostics?.covarianceTrace??null):null,
@@ -126,5 +181,13 @@ export function runUGVBicycleBaseline(userCfg={}){
     measurementRmse:estimationEnabled?rmse(measurementError2):null,
     estimateRmse:estimationEnabled?rmse(estimateError2):null,
     averageCovarianceTrace:estimationEnabled?covarianceTraceSum/n:null,
+    predictiveEnabled,
+    predictiveAverageSolveMs:predictiveEnabled?predictiveSolveMsSum/n:null,
+    predictiveMaxSolveMs:predictiveEnabled?predictiveSolveMsMax:null,
+    predictiveFeasibilityRate:predictiveEnabled?100*predictiveFeasibleCount/n:null,
+    predictiveFallbackCount:predictiveEnabled?predictiveFallbackCount:0,
+    predictiveInterventions:predictiveEnabled?predictiveInterventions:0,
+    predictedMaxCrossTrack:predictiveEnabled?predictedMaxCrossTrack:null,
+    predictedMaxHeadingError:predictiveEnabled?predictedMaxHeadingError:null,
   }};
 }
