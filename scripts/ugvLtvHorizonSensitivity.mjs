@@ -12,7 +12,7 @@ for (const horizon of horizons) {
   const m = result.metrics;
   rows.push({
     horizon,
-    horizonSeconds: (horizon * result.config.dt).toFixed(2),
+    horizonSeconds: (horizon * result.config.ugvLtvMpc.predictionDt).toFixed(2),
     lateralRMSE: m.lateralRmse.toFixed(4),
     headingRMSE: m.headingRmse.toFixed(4),
     speedRMSE: m.speedRmse.toFixed(4),
