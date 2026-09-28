@@ -281,12 +281,22 @@ export function buildUgvLtvQp(state, previousCommand, cfg) {
   };
 }
 
-function shiftWarmStart(sequence, horizon) {
+function shiftWarmStart(sequence, horizon, stages = 1) {
   if (!sequence || sequence.length !== horizon * 2) return null;
-  return [...sequence.slice(2), sequence[sequence.length - 2], sequence[sequence.length - 1]];
+  const shift = Math.max(1, Math.min(horizon, Math.round(stages))) * 2;
+  const tail = sequence.slice(-2);
+  const shifted = sequence.slice(shift);
+  while (shifted.length < horizon * 2) shifted.push(...tail);
+  return shifted.slice(0, horizon * 2);
 }
 
-export function solveUgvLtvMpc(state, previousCommand, cfg, warmStart = null) {
+export function solveUgvLtvMpc(
+  state,
+  previousCommand,
+  cfg,
+  warmStart = null,
+  warmStartShiftStages = 1,
+) {
   const qp = buildUgvLtvQp(state, previousCommand, cfg);
   const horizon = cfg.ugvLtvMpc.horizon;
   const solution = solveGenericConstrainedQP(qp, {
@@ -296,7 +306,7 @@ export function solveUgvLtvMpc(state, previousCommand, cfg, warmStart = null) {
     projectionCycles: cfg.ugvLtvMpc.qpProjectionCycles,
     projectionTolerance: cfg.ugvLtvMpc.qpProjectionTolerance,
     stepScale: cfg.ugvLtvMpc.qpStepScale,
-  }, shiftWarmStart(warmStart, horizon));
+  }, shiftWarmStart(warmStart, horizon, warmStartShiftStages));
 
   const accepted = solution.status === 'solved' || solution.status === 'max-iterations';
   const acceleration = accepted ? solution.x[0] : previousCommand.acceleration;
