@@ -12,11 +12,11 @@ import {
   computePhysicalCommandInterval,
   applySafetyGovernor,
 } from './safety/shortHorizonGovernor.js';
-import { solveMPC } from './solvers/index.js';
 import { evaluateEventTrigger } from './triggers/eventTrigger.js';
 import { defaultConfig, mergeSimulationConfig } from './orchestration/simulationConfig.js';
 import { computeSimulationMetrics, safetyViolationAt } from './orchestration/simulationMetrics.js';
 import { createEstimatorRuntime } from './orchestration/estimatorRuntime.js';
+import { createMpcPlanRuntime } from './orchestration/mpcPlanRuntime.js';
 
 export { defaultConfig };
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
@@ -59,39 +59,12 @@ export function runSimulation(mode, userConfig = {}) {
   let expectedState = { ...controllerState };
   let lastSolveState = { ...controllerState };
   let previousU = 0;
-  let lastMpcSafeU = 0;
-  let lastMpcPlan = null;
   let lastSolve = -Infinity;
   let reference = cfg.setpoint;
-  let warmStart = null;
-  const solverRecords = [];
+  const mpcPlanRuntime = createMpcPlanRuntime();
   const samples = [];
   const hybridMode = mode === 'HYBRID' || mode === 'HYBRID_SAFE';
   const governorMode = mode === 'HYBRID_SAFE';
-
-  function recordSolution(solution) {
-    solverRecords.push({
-      solveMs: solution.solveMs,
-      solver: solution.solver,
-      status: solution.status || (solution.diagnostics?.converged ? 'solved' : null),
-      fallbackUsed: Boolean(solution.fallbackUsed),
-      fallbackReason: solution.fallbackReason || null,
-      diagnostics: solution.diagnostics || null,
-    });
-  }
-
-  function acceptMpcPlan(solution) {
-    if (solution.fallbackUsed) return;
-    lastMpcPlan = [...solution.sequence];
-    lastMpcSafeU = solution.u;
-  }
-
-  function shiftMpcPlan() {
-    if (!lastMpcPlan?.length) return;
-    const tail = lastMpcPlan[lastMpcPlan.length - 1];
-    lastMpcPlan = [...lastMpcPlan.slice(1), tail];
-    if (Number.isFinite(lastMpcPlan[0])) lastMpcSafeU = lastMpcPlan[0];
-  }
 
   for (let k = 0; k <= steps; k += 1) {
     const t = k * cfg.dt;
@@ -136,24 +109,29 @@ export function runSimulation(mode, userConfig = {}) {
     if (mode === 'PID') {
       u = pid.update(controlCfg.setpoint, controllerState.x);
     } else if (mode === 'MPC') {
-      const solution = solveMPC(controllerState, solverCfg.setpoint, previousU, solverCfg, warmStart);
+      const solution = mpcPlanRuntime.solve({
+        state: controllerState,
+        target: solverCfg.setpoint,
+        previousU,
+        cfg: solverCfg,
+      });
       u = solution.u;
-      warmStart = solution.sequence;
-      acceptMpcPlan(solution);
       mpcCost = solution.cost;
       solverDiagnostics = solution.diagnostics || null;
       solverStatus = solution.status || null;
       fallbackUsed = Boolean(solution.fallbackUsed);
-      recordSolution(solution);
       triggered = true;
       triggerReason = 'periodic';
     } else if (hybridMode) {
       if (event.triggered) {
-        const solution = solveMPC(controllerState, solverCfg.setpoint, previousU, solverCfg, warmStart);
-        warmStart = solution.sequence;
+        const solution = mpcPlanRuntime.solve({
+          state: controllerState,
+          target: solverCfg.setpoint,
+          previousU,
+          cfg: solverCfg,
+        });
         if (!solution.fallbackUsed) {
           reference = predictiveReference(solution, solverCfg.setpoint, solverCfg);
-          acceptMpcPlan(solution);
         }
         lastSolve = t;
         lastSolveState = { ...controllerState };
@@ -161,13 +139,12 @@ export function runSimulation(mode, userConfig = {}) {
         solverDiagnostics = solution.diagnostics || null;
         solverStatus = solution.status || null;
         fallbackUsed = Boolean(solution.fallbackUsed);
-        recordSolution(solution);
         triggered = true;
         triggerReason = event.reason;
       }
 
       if (governorMode) {
-        const interval = computeAdmissibleCommandInterval(controllerState, previousU, controlCfg, lastMpcPlan);
+        const interval = computeAdmissibleCommandInterval(controllerState, previousU, controlCfg, mpcPlanRuntime.getContinuationSequence());
         const baseInterval = interval.baseInterval ?? computePhysicalCommandInterval(previousU, controlCfg);
         const pidResult = pid.updateDetailed(reference, controllerState.x, interval.feasible ? interval : null);
         pidRaw = pidResult.raw;
@@ -199,8 +176,8 @@ export function runSimulation(mode, userConfig = {}) {
             state: controllerState,
             proposedU: pidConditioned,
             previousU,
-            lastMpcSafeU,
-            continuationSequence: lastMpcPlan,
+            lastMpcSafeU: mpcPlanRuntime.getLastSafeU(),
+            continuationSequence: mpcPlanRuntime.getContinuationSequence(),
             cfg: controlCfg,
           });
           governor = {
@@ -302,9 +279,10 @@ export function runSimulation(mode, userConfig = {}) {
     disturbanceEstimate = estimatorSnapshot.disturbanceEstimate;
     disturbanceVariance = estimatorSnapshot.disturbanceVariance;
 
-    shiftMpcPlan();
+    mpcPlanRuntime.shiftPlan();
   }
 
+  const solverRecords = mpcPlanRuntime.getSolverRecords();
   return {
     samples,
     metrics: computeSimulationMetrics(samples, cfg.setpoint, solverRecords, cfg),
