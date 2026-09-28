@@ -26,3 +26,11 @@ export {
 export {
   runAdaptiveModelShadow,
 } from './services/researchService.js';
+
+export {
+  defaultUgvConfig,
+  executeUgvComparison,
+  executeUgvSimulation,
+  mergeUgvConfig,
+  UGV_CONTROLLER_MODES,
+} from './services/ugvService.js';
