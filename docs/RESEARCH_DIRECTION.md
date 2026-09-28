@@ -242,12 +242,62 @@ Kết luận Gate 4B: `d_hat` có giá trị rõ nhất ở **prediction monitor
 
 Không dùng EKF/UKF ở Gate 4B vì plant vẫn tuyến tính.
 
-### Gate 5 — Nonlinear plants — NEXT
+### Gate 5 — Nonlinear plants — ACTIVE
 
-Thứ tự:
-1. UGV bicycle model.
-2. UAV planar/attitude model.
-3. USV planar model.
+#### Gate 5A — UGV kinematic bicycle + classical baseline — PASS
+
+Đã triển khai nonlinear 4-state bicycle plant:
+
+```text
+state = [x, y, yaw, v]
+input = [steering, acceleration]
+
+x_dot   = v cos(yaw)
+y_dot   = v sin(yaw)
+yaw_dot = v/L tan(steering)
+v_dot   = acceleration
+```
+
+Classical baseline dùng:
+
+- Stanley-style lateral path following,
+- PID speed loop,
+- hard steering angle,
+- hard steering-rate,
+- acceleration/speed bounds,
+- deterministic S-path scenario,
+- explicit safety corridor + quality/compute metrics.
+
+Regression đại diện:
+
+```text
+cross-track RMSE:      0.3058 m
+heading RMSE:          0.0782 rad
+speed RMSE:            0.6415 m/s
+max |cross-track|:     0.6500 m
+max |heading error|:   0.2467 rad
+max steering rate:     0.9000 rad/s
+unsafe samples:        0
+final speed:           4.0053 m/s
+final x:               84.9448 m
+runner compute/step:   ~7.1 us
+```
+
+Compute/step ở đây chỉ là simulation timing trên CI runner, **không phải tuyên bố hardware real-time**.
+
+#### Gate 5B — Nonlinear state estimation for UGV bicycle — NEXT
+
+Bước tiếp theo:
+
+1. tạo noisy measurements phù hợp cho `x/y/yaw/v`,
+2. estimator phải dùng nonlinear motion model,
+3. không để controller đọc ground truth,
+4. deterministic seed + RMSE/covariance/innovation diagnostics,
+5. chỉ sau khi estimator PASS mới so constrained predictive control trên nonlinear plant.
+
+Sau UGV pipeline mới chuyển:
+- UAV planar/attitude,
+- USV planar.
 
 Không nhảy vào full 6-DOF UAV trước planar models PASS.
 
@@ -303,20 +353,18 @@ PASS khi:
 
 ## Milestone hiện tại
 
-**Gate 5 — Nonlinear plants — NEXT**
-
-Thứ tự triển khai bắt buộc:
+**Gate 5 — Nonlinear plants — ACTIVE**
 
 ```text
 Gate 4B linear mismatch/disturbance PASS
       ↓
-UGV bicycle model
+UGV bicycle nonlinear model        PASS
       ↓
-linear/classical baseline on nonlinear plant
+classical path/speed baseline      PASS
       ↓
-state estimation suitable for nonlinear model
+UGV nonlinear state estimation    NEXT
       ↓
-constrained predictive control comparison
+constrained predictive comparison
       ↓
 UAV planar / attitude model
       ↓
