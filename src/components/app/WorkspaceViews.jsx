@@ -1,8 +1,6 @@
 import React from 'react';
 import { Activity, BarChart3, BookOpen, CheckCircle2, Cpu, Database, Gauge, Settings, ShieldCheck, Sparkles, Zap } from 'lucide-react';
-import { applyExperimentPreset, EXPERIMENT_PRESETS } from '../../core/experiments/presets.js';
-import { defaultConfig } from '../../core/simulator.js';
-import { SOLVER_BACKENDS } from '../../core/solvers/index.js';
+import { applyExperimentPreset, defaultConfig, EXPERIMENT_PRESETS, SOLVER_BACKENDS } from '../../application/workbench.js';
 
 const MODE_ORDER = ['PID','MPC','HYBRID','HYBRID_SAFE'];
 const MODE_LABELS = { PID:'PID', MPC:'Periodic MPC', HYBRID:'Event MPC + PID', HYBRID_SAFE:'Event MPC + PID + Safety' };
