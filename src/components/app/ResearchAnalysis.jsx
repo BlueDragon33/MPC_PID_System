@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { Activity, BarChart3, BrainCircuit, CheckCircle2, Clock3, Cpu, Gauge, Radar, ShieldCheck, Sparkles } from 'lucide-react';
-import { runAdaptiveModelShadow } from '../../core/adaptation/runAdaptiveModelShadow.js';
+import { runAdaptiveModelShadow } from '../../application/workbench.js';
 import './researchAnalysis.css';
 
 const MODE_ORDER = ['PID', 'MPC', 'HYBRID', 'HYBRID_SAFE'];
