@@ -10,6 +10,16 @@ for (const horizon of horizons) {
     ugvLtvMpc: { horizon },
   });
   const m = result.metrics;
+  const residuals = result.solverRecords
+    .map((record) => record.diagnostics?.projectedGradientResidual)
+    .filter(Number.isFinite);
+  const avgResidual = residuals.length
+    ? residuals.reduce((sum, value) => sum + value, 0) / residuals.length
+    : 0;
+  const maxResidual = residuals.length ? Math.max(...residuals) : 0;
+  const repairedSolves = result.solverRecords.filter(
+    (record) => (record.diagnostics?.anchorRepairs ?? 0) > 0,
+  ).length;
   rows.push({
     horizon,
     horizonSeconds: (horizon * result.config.ugvLtvMpc.predictionDt).toFixed(2),
@@ -22,6 +32,9 @@ for (const horizon of horizons) {
     solvedPct: m.convergenceRate?.toFixed(1) ?? '—',
     acceptedPct: m.acceptedRate?.toFixed(1) ?? '—',
     fallback: m.fallbackCount,
+    avgResidual: avgResidual.toExponential(2),
+    maxResidual: maxResidual.toExponential(2),
+    anchorRepair: repairedSolves,
     avgSolveMs: m.averageSolveMs.toFixed(2),
     maxSolveMs: m.maxSolveMs.toFixed(2),
   });
