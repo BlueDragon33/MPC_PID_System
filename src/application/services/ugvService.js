@@ -7,7 +7,10 @@ import {
   defaultUgvConfig,
   mergeUgvConfig,
 } from '../../core/orchestration/ugvSimulationConfig.js';
-import { assertUgvComparisonContract } from '../../contracts/workbenchContracts.js';
+import {
+  assertUgvComparisonContract,
+  assertUgvResultContract,
+} from '../../contracts/workbenchContracts.js';
 
 export {
   defaultUgvConfig,
@@ -20,10 +23,5 @@ export function executeUgvComparison(config = {}) {
 }
 
 export function executeUgvSimulation(mode, config = {}) {
-  const result = runUgvSimulation(mode, config);
-  assertUgvComparisonContract([
-    mode === UGV_CONTROLLER_MODES.CLASSICAL ? result : runUgvSimulation(UGV_CONTROLLER_MODES.CLASSICAL, { ...config, duration: Math.min(config.duration ?? 0.1, 0.1) }),
-    mode === UGV_CONTROLLER_MODES.LTV_MPC ? result : runUgvSimulation(UGV_CONTROLLER_MODES.LTV_MPC, { ...config, duration: Math.min(config.duration ?? 0.1, 0.1) }),
-  ]);
-  return result;
+  return assertUgvResultContract(runUgvSimulation(mode, config));
 }
