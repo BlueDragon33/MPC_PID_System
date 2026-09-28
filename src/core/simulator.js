@@ -15,90 +15,11 @@ import {
   computePhysicalCommandInterval,
   applySafetyGovernor,
 } from './safety/shortHorizonGovernor.js';
-import { solveMPC, SOLVER_BACKENDS } from './solvers/index.js';
+import { solveMPC } from './solvers/index.js';
 import { evaluateEventTrigger } from './triggers/eventTrigger.js';
+import { defaultConfig, mergeSimulationConfig } from './orchestration/simulationConfig.js';
 
-export const defaultConfig = {
-  dt: 0.02,
-  duration: 12,
-  setpoint: 1,
-  plant: { stiffness: 1.45, gain: 1.0, damping: 0.82 },
-  truthPlant: {
-    enabled: false,
-    stiffnessScale: 1,
-    dampingScale: 1,
-    gainScale: 1,
-  },
-  pid: { kp: 5.2, ki: 1.35, kd: 0.52, uMin: -4, uMax: 4, antiWindup: 0.5 },
-  mpc: {
-    solver: SOLVER_BACKENDS.CONSTRAINED_QP,
-    horizon: 35,
-    qPosition: 9,
-    qVelocity: 1.2,
-    rInput: 0.16,
-    rDelta: 0.12,
-    terminalWeight: 8,
-    iterations: 20,
-    learningRate: 0.12,
-    qpIterations: 60,
-    qpTolerance: 5e-4,
-    qpStepScale: 0.95,
-    qpProjectionCycles: 6,
-    qpProjectionTolerance: 1e-9,
-    qpFeasibilityTolerance: 1e-7,
-    qpTimeBudgetMs: 0,
-    uMin: -4,
-    uMax: 4,
-    deltaUMin: -0.65,
-    deltaUMax: 0.65,
-    stateConstraintsEnabled: false,
-    positionMin: -1.5,
-    positionMax: 1.5,
-    velocityMin: -1.2,
-    velocityMax: 1.2,
-    outputConstraintsEnabled: false,
-    outputMin: -0.2,
-    outputMax: 1.05,
-    referenceLead: 0.5,
-    velocityDamping: 0.08,
-    maxReferenceLead: 0.4,
-  },
-  safety: {
-    previewHorizon: 6,
-    positionMargin: 0,
-    velocityMargin: 0,
-    outputMargin: 0,
-  },
-  estimation: {
-    enabled: false,
-    measurementNoiseStd: 0.08,
-    measurementBias: 0,
-    seed: 20260914,
-    processPositionVariance: 2e-5,
-    processVelocityVariance: 2e-4,
-    initialPositionVariance: 0.25,
-    initialVelocityVariance: 0.8,
-    constraintTighteningEnabled: false,
-    constraintSigma: 2.0,
-    disturbanceStateEnabled: false,
-    disturbanceProcessVariance: 8e-3,
-    initialDisturbanceVariance: 0.8,
-    disturbanceRetention: 1,
-    disturbancePredictionEnabled: false,
-    mpcDisturbanceCompensationEnabled: false,
-  },
-  trigger: {
-    predictionError: 0.035,
-    stateChange: 0.08,
-    minInterval: 0.08,
-    maxInterval: 0.36,
-    constraintRatio: 0.92,
-    positionScale: 1,
-    velocityScale: 1,
-  },
-  disturbance: { enabled: true, start: 4.0, duration: 1.0, amplitude: 1.6 },
-};
-
+export { defaultConfig };
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const average = (values) => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
 const rms = (values) => values.length
@@ -280,23 +201,8 @@ function metrics(samples, target, solverRecords, cfg) {
   };
 }
 
-function mergeConfig(userConfig) {
-  return {
-    ...defaultConfig,
-    ...userConfig,
-    plant: { ...defaultConfig.plant, ...(userConfig.plant || {}) },
-    truthPlant: { ...defaultConfig.truthPlant, ...(userConfig.truthPlant || {}) },
-    pid: { ...defaultConfig.pid, ...(userConfig.pid || {}) },
-    mpc: { ...defaultConfig.mpc, ...(userConfig.mpc || {}) },
-    safety: { ...defaultConfig.safety, ...(userConfig.safety || {}) },
-    estimation: { ...defaultConfig.estimation, ...(userConfig.estimation || {}) },
-    trigger: { ...defaultConfig.trigger, ...(userConfig.trigger || {}) },
-    disturbance: { ...defaultConfig.disturbance, ...(userConfig.disturbance || {}) },
-  };
-}
-
 export function runSimulation(mode, userConfig = {}) {
-  const cfg = mergeConfig(userConfig);
+  const cfg = mergeSimulationConfig(userConfig);
   const steps = Math.floor(cfg.duration / cfg.dt);
   const pid = createPIDController(cfg.pid, cfg.dt);
   const model = createSecondOrderModel(cfg);
