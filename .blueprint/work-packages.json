@@ -137,11 +137,29 @@
       ]
     },
     {
+      "id": "WP06R",
+      "title": "Release readiness preparation",
+      "status": "ACTIVE",
+      "dependsOn": [
+        "WP06"
+      ],
+      "gates": [
+        "dependency-lock",
+        "security-scan",
+        "exact-head-evidence",
+        "artifact-integrity",
+        "rollback-readiness",
+        "release-candidate-smoke"
+      ],
+      "evidence": [],
+      "productionAuthority": false
+    },
+    {
       "id": "WP07",
       "title": "Release hardening and exact-head evidence",
       "status": "QUEUED",
       "dependsOn": [
-        "WP06"
+        "WP06R"
       ],
       "gates": [
         "release-mode",
