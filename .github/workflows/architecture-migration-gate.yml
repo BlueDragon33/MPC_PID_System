@@ -8,7 +8,10 @@ on:
       - "src/contracts/**"
       - "src/components/**"
       - "src/App.jsx"
+      - "src/core/orchestration/**"
+      - "src/core/simulator.js"
       - "scripts/architectureCheck.mjs"
+      - "scripts/orchestrationContractSmoke.mjs"
       - ".github/workflows/architecture-*.yml"
   workflow_dispatch:
 
@@ -28,6 +31,8 @@ jobs:
         run: npm install --no-audit --no-fund
       - name: Architecture boundary gate
         run: node scripts/architectureCheck.mjs
+      - name: Orchestration contract gate
+        run: node scripts/orchestrationContractSmoke.mjs
       - name: Control regression gate
         run: npm run smoke
       - name: Web-app build gate
