@@ -43,6 +43,7 @@ export const defaultUgvConfig = Object.freeze({
   },
   ugvLtvMpc: {
     horizon: 14,
+    solveInterval: 0.10,
     qLateral: 16,
     qHeading: 11,
     qSpeed: 2.2,
