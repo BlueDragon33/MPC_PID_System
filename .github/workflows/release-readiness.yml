@@ -5,7 +5,6 @@ on:
     paths:
       - ".blueprint/**"
       - "package.json"
-      - "package-lock.json"
       - "index.html"
       - "public/**"
       - "src/**"
@@ -16,75 +15,89 @@ permissions:
   contents: read
 
 jobs:
-  dependency-lock:
+  readiness:
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Check dependency lock
+
+      - name: Resolve and verify dependency lock blueprint
         id: lock
         shell: bash
         run: |
           set -euo pipefail
-          if [[ -f package-lock.json ]]; then
-            echo "present=true" >> "$GITHUB_OUTPUT"
-          else
-            npm install --package-lock-only --ignore-scripts --no-audit --no-fund
-            echo "present=false" >> "$GITHUB_OUTPUT"
+          echo "node_version=$(node --version)" >> "$GITHUB_OUTPUT"
+          echo "npm_version=$(npm --version)" >> "$GITHUB_OUTPUT"
+
+          rm -f package-lock.json
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+
+          actual="$(sha256sum package-lock.json | awk '{print $1}')"
+          expected="$(node -e "const p=require('./.blueprint/dependency-lock.json'); process.stdout.write(p.expectedLockSha256 || '')")"
+
+          echo "actual_sha=$actual" >> "$GITHUB_OUTPUT"
+          echo "expected_sha=$expected" >> "$GITHUB_OUTPUT"
+
+          if [[ -z "$expected" ]]; then
+            echo "::error::Dependency lock blueprint is not bootstrapped. Generated lock SHA-256: $actual"
+            exit 1
           fi
+
+          if [[ "$actual" != "$expected" ]]; then
+            echo "::error::Dependency resolution drift detected. Expected $expected, got $actual"
+            exit 1
+          fi
+
       - name: Preserve generated lock candidate
-        if: ${{ steps.lock.outputs.present == 'false' }}
+        if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
           name: package-lock-candidate
           path: package-lock.json
           retention-days: 3
-      - name: Require committed dependency lock
-        if: ${{ steps.lock.outputs.present == 'false' }}
-        shell: bash
-        run: |
-          echo "::error::package-lock.json is required for release readiness. A generated candidate was uploaded as an artifact."
-          exit 1
 
-  readiness:
-    needs: dependency-lock
-    runs-on: ubuntu-24.04
-    timeout-minutes: 18
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - name: Install exact locked dependencies
+      - name: Install exact resolved dependencies
         run: npm ci --no-audit --no-fund
+
       - name: Dependency vulnerability gate
         run: npm audit --audit-level=high
+
       - name: Architecture gate
         run: node scripts/architectureCheck.mjs
+
       - name: Source security gate
         run: node scripts/releaseSecurityScan.mjs
+
       - name: Orchestration contract gate
         run: node scripts/orchestrationContractSmoke.mjs
+
       - name: Presentation contract gate
         run: node scripts/presentationContractSmoke.mjs
+
       - name: Recovery contract gate
         run: node scripts/resilienceSmoke.mjs
+
       - name: Full control regression
         run: npm run smoke
+
       - name: Full research benchmark
         run: npm run benchmark
+
       - name: Build immutable standalone candidate
         run: npm run build -- --base=./
+
       - name: Generate exact-head release evidence
         env:
           RELEASE_CANDIDATE_SHA: ${{ github.event.pull_request.head.sha }}
           RELEASE_ROLLBACK_SHA: ${{ github.event.pull_request.base.sha }}
         run: node scripts/generateReleaseEvidence.mjs dist release-evidence.json
+
       - name: Verify artifact integrity evidence
         run: node scripts/verifyReleaseEvidence.mjs release-evidence.json dist
+
       - name: Browser online and offline candidate smoke
         shell: bash
         run: |
@@ -118,6 +131,7 @@ jobs:
           "$browser"             --headless             --no-sandbox             --disable-gpu             --user-data-dir=/tmp/mpc-release-profile             --virtual-time-budget=5000             --dump-dom             http://127.0.0.1:4173/ > /tmp/mpc-release-offline.html
 
           grep -q 'MPC-PID Control System' /tmp/mpc-release-offline.html
+
       - name: Preserve release-readiness evidence
         uses: actions/upload-artifact@v4
         with:
@@ -126,6 +140,7 @@ jobs:
             dist
             package-lock.json
             release-evidence.json
+            .blueprint/dependency-lock.json
             .blueprint/release-readiness.json
             .blueprint/rollback-policy.json
           retention-days: 14
