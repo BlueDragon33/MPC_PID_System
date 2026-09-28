@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { ChevronDown, Gauge, Play, RotateCcw, SlidersHorizontal } from 'lucide-react';
 import ExperimentSafetyPanel from '../ExperimentSafetyPanel.jsx';
-import { SOLVER_BACKENDS } from '../../core/solvers/index.js';
+import { SOLVER_BACKENDS } from '../../application/workbench.js';
 
 const MODES = ['PID', 'MPC', 'HYBRID', 'HYBRID_SAFE'];
 const MODE_LABELS = {
