@@ -422,18 +422,63 @@ runner compute/step:    ~10.03 us
 
 Compute/step chỉ là simulation timing trên CI runner, không phải hardware real-time claim.
 
-#### Gate 5E — UAV planar nonlinear state estimation — NEXT
+#### Gate 5E — UAV planar nonlinear state estimation — PASS
 
-Thứ tự tiếp theo:
+Đã triển khai deterministic noisy measurements và EKF 6 trạng thái cho planar UAV:
 
-1. deterministic noisy measurements cho planar UAV state,
-2. nonlinear estimator phù hợp với model planar,
-3. controller dùng estimated state, ground truth chỉ dành cho plant/audit,
-4. same-seed determinism + different-seed sensitivity,
-5. RMSE/covariance/safety regression,
-6. chỉ sau estimator PASS mới thêm predictive layer cho UAV.
+- state estimate: `[x, z, theta, vx, vz, q]`,
+- nonlinear prediction dùng đúng plant planar Gate 5D,
+- analytic Jacobian cho coupling thrust/attitude/velocity,
+- sequential Joseph-form covariance update,
+- attitude innovation wrap trong `[-π, π]`,
+- controller dùng estimated state khi estimation bật,
+- ground truth chỉ dùng cho plant propagation và audit,
+- same-seed deterministic trace + different-seed sensitivity,
+- RMSE/covariance/closed-loop safety regression.
 
-Sau UAV planar estimation/predictive pipeline mới chuyển USV planar.
+Regression đại diện trên Gate 5E CI:
+
+```text
+measurement RMSE:
+  x:     0.08119 m
+  z:     0.05865 m
+  theta: 0.01488 rad
+  vx:    0.07995 m/s
+  vz:    0.07009 m/s
+  q:     0.03922 rad/s
+
+EKF RMSE:
+  x:     0.01318 m
+  z:     0.00991 m
+  theta: 0.00305 rad
+  vx:    0.02637 m/s
+  vz:    0.02368 m/s
+  q:     0.01920 rad/s
+
+estimated-state closed loop:
+  x RMSE:                 0.22000 m
+  z RMSE:                 0.07212 m
+  vx RMSE:                0.17554 m/s
+  vz RMSE:                0.06235 m/s
+  attitude tracking RMSE: 0.01937 rad
+  average covariance:     0.003410
+  unsafe samples:         0
+```
+
+Gate 5E workflow, full smoke, full benchmark, web build và release-readiness candidate đều PASS trên implementation head.
+
+#### Gate 5F — UAV planar constrained predictive comparison — NEXT
+
+Bước kế tiếp là thêm predictive layer **sau** estimator đã PASS, vẫn giữ classical estimated-state controller làm baseline bắt buộc:
+
+1. nonlinear finite-horizon prediction trên planar UAV,
+2. hard thrust/torque và safety-envelope feasibility,
+3. predicted feasibility tách khỏi actual plant safety,
+4. cùng estimator seed/config để A/B công bằng,
+5. đo tracking quality, control effort và compute cost,
+6. không gọi là NMPC nếu chưa tối ưu full nonlinear control sequence bằng nonlinear-program solver.
+
+Chỉ sau UAV planar estimation + predictive pipeline mới chuyển USV planar.
 
 Không nhảy vào full 6-DOF UAV trước planar models PASS.
 
@@ -504,7 +549,9 @@ constrained predictive comparison PASS
       ↓
 UAV planar / attitude baseline     PASS
       ↓
-UAV nonlinear state estimation    NEXT
+UAV nonlinear state estimation    PASS
+      ↓
+UAV constrained predictive layer  NEXT
       ↓
 USV planar model
 ```
