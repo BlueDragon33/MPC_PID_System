@@ -5,6 +5,10 @@ import {
   executeControllerComparison,
   SOLVER_BACKENDS,
 } from '../../application/workbench.js';
+import {
+  loadWorkbenchRecovery,
+  saveWorkbenchRecovery,
+} from '../../application/persistence/workbenchRecovery.js';
 import { normalizeWorkbenchRoute, workbenchRouteHash } from './navigation.js';
 
 const deepClone = (value) => JSON.parse(JSON.stringify(value));
@@ -15,11 +19,12 @@ function initialRoute() {
 }
 
 export function useWorkbenchController() {
-  const [draftCfg, setDraftCfg] = useState(() => deepClone(defaultConfig));
-  const [runCfg, setRunCfg] = useState(() => deepClone(defaultConfig));
-  const [activeMode, setActiveMode] = useState('HYBRID_SAFE');
+  const [recovery] = useState(() => loadWorkbenchRecovery());
+  const [draftCfg, setDraftCfg] = useState(() => deepClone(recovery?.draftCfg ?? defaultConfig));
+  const [runCfg, setRunCfg] = useState(() => deepClone(recovery?.runCfg ?? defaultConfig));
+  const [activeMode, setActiveMode] = useState(recovery?.activeMode ?? 'HYBRID_SAFE');
   const [activeNav, setActiveNav] = useState(initialRoute);
-  const [presetId, setPresetId] = useState('baseline');
+  const [presetId, setPresetId] = useState(recovery?.presetId ?? 'baseline');
   const [batchResult, setBatchResult] = useState(null);
 
   const results = useMemo(() => executeControllerComparison(runCfg), [runCfg]);
@@ -38,6 +43,15 @@ export function useWorkbenchController() {
     }
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
+
+  useEffect(() => {
+    saveWorkbenchRecovery({
+      draftCfg,
+      runCfg,
+      presetId,
+      activeMode,
+    });
+  }, [draftCfg, runCfg, presetId, activeMode]);
 
   const navigate = (route) => {
     const nextHash = workbenchRouteHash(route);
