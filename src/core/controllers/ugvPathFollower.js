@@ -25,6 +25,9 @@ export function createUGVPathFollower(cfg={}){
       const accel=speedPid.update(ref.speed,state.v);
       return {steer,accel,headingError,crossTrackError,rawSteer};
     },
+    syncAppliedSteer(steer){
+      if(Number.isFinite(steer)) previousSteer=clamp(steer,-maxSteer,maxSteer);
+    },
     reset(){previousSteer=0;speedPid.reset();}
   };
 }

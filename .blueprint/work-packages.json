@@ -225,7 +225,7 @@
     {
       "id": "RWP05C",
       "title": "Gate 5C — constrained predictive control comparison on nonlinear UGV",
-      "status": "QUEUED",
+      "status": "PASS",
       "dependsOn": [
         "RWP05B"
       ],
@@ -236,6 +236,38 @@
         "safety-audit",
         "compute-quality-comparison",
         "deterministic-regression"
+      ],
+      "evidence": [
+        "nonlinear finite-candidate predictive governor over UGV bicycle rollout",
+        "classical Stanley+PID proposal retained as mandatory baseline",
+        "hard steering, steering-rate, acceleration and speed constraints enforced",
+        "predicted feasibility audited separately from actual nonlinear plant safety",
+        "estimated-state A/B uses same EKF seed/config",
+        "cross-track RMSE 0.3078 -> 0.1287 m",
+        "heading RMSE 0.07872 -> 0.05751 rad",
+        "speed RMSE 0.64031 -> 0.63624 m/s",
+        "control effort 1.3268 -> 1.1802",
+        "compute per step 68.64 -> 81.98 us on CI runner (~1.194x)",
+        "predictive feasibility 100%; fallback 0; actual unsafe samples 0",
+        "predictive interventions 1085; average governor solve 0.0319 ms",
+        "Gate 5C workflow + full smoke + full benchmark + web build PASS",
+        "not classified as NMPC: no optimized control sequence, warm start or nonlinear-program solver"
+      ],
+      "productionAuthority": false
+    },
+    {
+      "id": "RWP05D",
+      "title": "Gate 5D — UAV planar/attitude nonlinear classical baseline",
+      "status": "QUEUED",
+      "dependsOn": [
+        "RWP05C"
+      ],
+      "gates": [
+        "nonlinear-uav-model-contract",
+        "classical-baseline-regression",
+        "deterministic-scenario",
+        "safety-audit",
+        "quality-compute-metrics"
       ],
       "evidence": [],
       "productionAuthority": false

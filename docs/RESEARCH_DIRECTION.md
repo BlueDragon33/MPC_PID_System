@@ -327,20 +327,66 @@ estimated-state loop:
   avg covariance trace: 0.00720
 ```
 
-#### Gate 5C — Constrained predictive control comparison on nonlinear UGV — NEXT
+#### Gate 5C — Constrained predictive control comparison on nonlinear UGV — PASS
 
-Chỉ sau Gate 5B PASS mới được:
+Đã triển khai một **constrained predictive governor** trên nonlinear bicycle rollout. Đây chưa phải NMPC của Gate 6 vì không tối ưu cả control sequence và không có nonlinear-program solver/warm start.
 
-1. xây nonlinear prediction rollout cho UGV,
-2. giữ classical controller làm baseline bắt buộc,
-3. áp steering/steering-rate/acceleration/speed constraints rõ ràng,
-4. so tracking quality với compute cost,
-5. audit actual nonlinear plant safety tách khỏi predicted feasibility,
-6. giữ deterministic reproducible scenarios.
+Thiết kế:
 
-Sau UGV pipeline mới chuyển:
-- UAV planar/attitude,
-- USV planar.
+- classical Stanley + PID vẫn tạo proposal,
+- predictive governor tạo tập candidate command hữu hạn quanh proposal,
+- mỗi candidate được rollout bằng nonlinear bicycle model,
+- loại candidate vi phạm cross-track / heading / speed envelope,
+- hard steering, steering-rate, acceleration và speed bounds vẫn được giữ,
+- predicted feasibility và actual plant safety được audit riêng,
+- comparison dùng cùng EKF seed/config.
+
+A/B đại diện:
+
+```text
+classical estimated-state:
+  cross-track RMSE: 0.30780 m
+  heading RMSE:     0.07872 rad
+  speed RMSE:       0.64031 m/s
+  control effort:   1.32682
+  unsafe samples:   0
+  compute/step:     68.64 us
+
+predictive governor:
+  cross-track RMSE: 0.12869 m
+  heading RMSE:     0.05751 rad
+  speed RMSE:       0.63624 m/s
+  control effort:   1.18018
+  unsafe samples:   0
+  compute/step:     81.98 us
+  avg governor solve: 0.03193 ms
+  max governor solve: 0.53627 ms
+  predicted feasibility: 100%
+  fallback:          0
+```
+
+Trade-off:
+
+```text
+cross-track ratio predictive/classical: 0.418
+heading ratio:                           0.731
+speed ratio:                             0.994
+compute ratio:                           1.194
+```
+
+Kết luận: prediction đáng giá trong scenario UGV hiện tại vì tracking cải thiện lớn hơn mức tăng compute, nhưng đây vẫn chỉ là một plant/scenario; chưa được phép tổng quát hóa thành kết luận NMPC.
+
+#### Gate 5D — UAV planar/attitude nonlinear classical baseline — NEXT
+
+Sau khi UGV pipeline 5A–5C PASS, bước tiếp theo là:
+
+1. mô hình UAV planar/attitude nonlinear có state/input rõ,
+2. classical stabilizing baseline trước,
+3. deterministic scenarios + safety envelope,
+4. quality/compute metrics,
+5. estimator/predictive layers chỉ thêm sau baseline PASS.
+
+Sau UAV planar mới chuyển USV planar.
 
 Không nhảy vào full 6-DOF UAV trước planar models PASS.
 
@@ -407,9 +453,9 @@ classical path/speed baseline      PASS
       ↓
 UGV nonlinear state estimation    PASS
       ↓
-constrained predictive comparison NEXT
+constrained predictive comparison PASS
       ↓
-UAV planar / attitude model
+UAV planar / attitude baseline     NEXT
       ↓
 USV planar model
 ```
