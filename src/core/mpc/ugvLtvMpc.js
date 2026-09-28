@@ -299,6 +299,15 @@ export function solveUgvLtvMpc(
 ) {
   const qp = buildUgvLtvQp(state, previousCommand, cfg);
   const horizon = cfg.ugvLtvMpc.horizon;
+  const previousDeviation = [
+    previousCommand?.acceleration ?? 0,
+    (previousCommand?.steering ?? 0) - qp.steeringFeedforward,
+  ];
+  const holdCurrentCommandSeed = Array.from(
+    { length: horizon },
+    () => previousDeviation,
+  ).flat();
+
   const solution = solveGenericConstrainedQP(qp, {
     maxIterations: cfg.ugvLtvMpc.qpIterations,
     tolerance: cfg.ugvLtvMpc.qpTolerance,
@@ -306,6 +315,7 @@ export function solveUgvLtvMpc(
     projectionCycles: cfg.ugvLtvMpc.qpProjectionCycles,
     projectionTolerance: cfg.ugvLtvMpc.qpProjectionTolerance,
     stepScale: cfg.ugvLtvMpc.qpStepScale,
+    feasibleSeed: holdCurrentCommandSeed,
   }, shiftWarmStart(warmStart, horizon, warmStartShiftStages));
 
   const accepted = solution.status === 'solved' || solution.status === 'max-iterations';
