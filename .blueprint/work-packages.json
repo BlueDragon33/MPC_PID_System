@@ -258,7 +258,7 @@
     {
       "id": "RWP05D",
       "title": "Gate 5D — UAV planar/attitude nonlinear classical baseline",
-      "status": "ACTIVE",
+      "status": "PASS",
       "dependsOn": [
         "RWP05C"
       ],
@@ -268,6 +268,34 @@
         "deterministic-scenario",
         "safety-audit",
         "quality-compute-metrics"
+      ],
+      "evidence": [
+        "nonlinear 6-state planar UAV model [x,z,theta,vx,vz,q] with thrust/torque inputs",
+        "cascaded classical position/velocity outer loop and attitude PD inner loop",
+        "deterministic forward-flight + altitude-wave scenario",
+        "hard thrust/torque bounds and explicit actual safety audit",
+        "x RMSE 0.2158 m; z RMSE 0.0725 m; vx RMSE 0.1757 m/s; vz RMSE 0.0611 m/s",
+        "attitude tracking RMSE 0.0184 rad; max |tilt| 0.1588 rad",
+        "unsafe samples 0; max x error 0.5790 m; max z error 0.3535 m",
+        "final vx 1.1000 m/s; final altitude 2.0122 m; final x 19.6643 m",
+        "compute ~10.03 us/step on GitHub runner; not a hardware real-time claim",
+        "Gate 5D workflow + full smoke + full benchmark + web build PASS"
+      ],
+      "productionAuthority": false
+    },
+    {
+      "id": "RWP05E",
+      "title": "Gate 5E — UAV planar nonlinear state estimation",
+      "status": "QUEUED",
+      "dependsOn": [
+        "RWP05D"
+      ],
+      "gates": [
+        "nonlinear-uav-estimator-contract",
+        "no-ground-truth-leak",
+        "deterministic-noise",
+        "closed-loop-estimation",
+        "safety-audit"
       ],
       "evidence": [],
       "productionAuthority": false
