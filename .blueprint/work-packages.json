@@ -286,7 +286,7 @@
     {
       "id": "RWP05E",
       "title": "Gate 5E — UAV planar nonlinear state estimation",
-      "status": "QUEUED",
+      "status": "ACTIVE",
       "dependsOn": [
         "RWP05D"
       ],
