@@ -1,0 +1,53 @@
+name: MPC PID Gate 5C UGV Predictive Governor
+
+on:
+  pull_request:
+    paths:
+      - "src/core/controllers/ugvPredictiveGovernor.js"
+      - "src/core/controllers/ugvPathFollower.js"
+      - "src/core/orchestration/ugvBicycleSimulator.js"
+      - "scripts/ugvPredictiveGovernorSmoke.mjs"
+      - ".blueprint/work-packages.json"
+      - "docs/RESEARCH_DIRECTION.md"
+      - "README.md"
+      - ".github/workflows/gate5c-ugv-predictive.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  gate5c:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Resolve approved dependency graph
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f package-lock.json
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+          actual="$(sha256sum package-lock.json | awk '{print $1}')"
+          expected="$(node -e "const p=require('./.blueprint/dependency-lock.json'); process.stdout.write(p.expectedLockSha256 || '')")"
+          if [[ "$actual" != "$expected" ]]; then
+            echo "::error::Dependency graph drift. Expected $expected, got $actual"
+            exit 1
+          fi
+          npm ci --no-audit --no-fund
+      - name: Architecture boundary gate
+        run: node scripts/architectureCheck.mjs
+      - name: Gate 5A nonlinear baseline
+        run: node scripts/ugvBicycleBaselineSmoke.mjs
+      - name: Gate 5B nonlinear EKF
+        run: node scripts/ugvBicycleEkfSmoke.mjs
+      - name: Gate 5C predictive comparison
+        run: node scripts/ugvPredictiveGovernorSmoke.mjs
+      - name: Full control regression
+        run: npm run smoke
+      - name: Full research benchmark
+        run: npm run benchmark
+      - name: Web-app build
+        run: npm run build -- --base=./
