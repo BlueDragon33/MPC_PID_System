@@ -313,7 +313,7 @@
     {
       "id": "RWP05F",
       "title": "Gate 5F — constrained predictive control comparison on nonlinear planar UAV",
-      "status": "ACTIVE",
+      "status": "PASS",
       "dependsOn": [
         "RWP05E"
       ],
@@ -324,6 +324,38 @@
         "safety-audit",
         "compute-quality-comparison",
         "deterministic-regression"
+      ],
+      "evidence": [
+        "finite-candidate predictive policy-offset governor over nonlinear planar UAV rollout",
+        "EKF-driven classical cascaded controller retained as mandatory A/B baseline",
+        "hard thrust/torque bounds and predicted x/z/tilt/velocity/altitude safety envelope enforced",
+        "predicted feasibility audited separately from actual nonlinear plant safety",
+        "same estimator seed/config used for classical and predictive comparison",
+        "x RMSE 0.22000 -> 0.21934 m; vx RMSE 0.17554 -> 0.17398 m/s",
+        "z RMSE 0.07212 -> 0.07874 m (~9.18% degradation); vz RMSE 0.06235 -> 0.05311 m/s",
+        "attitude tracking RMSE 0.01937 -> 0.01910 rad; control effort 0.01063 -> 0.00782",
+        "predictive feasibility 100%; fallback 0; actual unsafe samples 0; interventions 1584",
+        "predicted maxima x-error/z-error/tilt/vx/vz = 0.6309/0.3691/0.1926/1.4294/0.3386 within configured envelopes",
+        "compute 119.24 -> 156.22 us/step on CI runner (~1.31x); average governor solve 0.05766 ms; max 1.21786 ms",
+        "Gate 5F workflow run #2 + full smoke + full benchmark + web build PASS",
+        "Release Readiness run #66 PASS on the implementation head",
+        "not classified as NMPC: finite policy offsets only; no optimized nonlinear control sequence, NLP solver or warm start"
+      ],
+      "productionAuthority": false
+    },
+    {
+      "id": "RWP05G",
+      "title": "Gate 5G — USV planar nonlinear classical baseline",
+      "status": "QUEUED",
+      "dependsOn": [
+        "RWP05F"
+      ],
+      "gates": [
+        "nonlinear-usv-model-contract",
+        "classical-baseline-regression",
+        "deterministic-scenario",
+        "safety-audit",
+        "quality-compute-metrics"
       ],
       "evidence": [],
       "productionAuthority": false
