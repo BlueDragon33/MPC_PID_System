@@ -109,6 +109,28 @@ MPC/Governor dùng envelope đã co để bù uncertainty của estimator. Actua
 
 Sensitivity benchmark hiện chọn `kσ = 1.5` cho preset noisy-estimation vì 2σ trở lên bắt đầu làm solver fallback trong scenario hiện tại.
 
+
+### Model mismatch + disturbance-state estimation
+
+Truth plant có thể lệch stiffness/damping/gain so với controller model. Preset `mismatch-observer` dùng augmented `x-v-d` Kalman observer với disturbance retention `ρd = 0.90`.
+
+Gate 4B closeout đại diện:
+
+```text
+2-state KF:
+  IAE 1.6244 · solves 28 · xRMSE 0.0383 · vRMSE 0.1674
+
+x-v-d observer:
+  IAE 1.6278 · solves 29 · xRMSE 0.0368 · vRMSE 0.1606
+  dRMSE 0.4673 · convergence 100% · fallback 0 · plant violation 0
+
+d-hat-aware Event Monitor:
+  prediction triggers 3 → 1
+  solves              30 → 29
+```
+
+Affine disturbance compensation đã được regression-test trong condensed QP và closed loop, nhưng vẫn **opt-in** vì lợi ích tracking/compute hiện còn rất nhỏ trên linear plant. Không dùng kết quả này để kết luận tổng quát cho nonlinear plants.
+
 ### Reproducible experiments
 
 Preset hiện có gồm:
@@ -118,6 +140,8 @@ Preset hiện có gồm:
 - `safety-envelope`,
 - `disturbance-stress`,
 - `noisy-estimation`,
+- `model-mismatch`,
+- `mismatch-observer`,
 - `infeasible-guard`.
 
 Experiment dùng schema:
@@ -168,8 +192,8 @@ src/core/
 - Predicted state/output safety — PASS
 - Safety Governor / admissibility filter — PASS
 - Linear Kalman state estimation + covariance-aware safety — PASS
-- **Model mismatch + disturbance-state estimation — ACTIVE**
-- Nonlinear UGV/UAV/USV models — NEXT
+- Model mismatch + disturbance-state estimation — PASS
+- **Nonlinear UGV/UAV/USV models — NEXT**
 - NMPC — LATER
 - Adaptive / Learning MPC — LATER
 - HIL / hardware timing validation — LATER
