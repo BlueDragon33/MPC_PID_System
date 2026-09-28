@@ -1,0 +1,36 @@
+name: MPC PID Experiment Services Gate
+
+on:
+  pull_request:
+    paths:
+      - ".blueprint/**"
+      - "src/application/**"
+      - "src/core/experiments/**"
+      - "src/core/orchestration/simulationConfig.js"
+      - "scripts/experimentRoundtrip.mjs"
+      - "scripts/experimentMatrixSmoke.mjs"
+      - ".github/workflows/experiment-services-gate.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  experiment-services:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Architecture boundary gate
+        run: node scripts/architectureCheck.mjs
+      - name: Serialization roundtrip gate
+        run: node scripts/experimentRoundtrip.mjs
+      - name: Batch determinism gate
+        run: node scripts/experimentMatrixSmoke.mjs
+      - name: Web-app build gate
+        run: npm run build
