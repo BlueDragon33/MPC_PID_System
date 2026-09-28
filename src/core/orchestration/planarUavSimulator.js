@@ -1,4 +1,5 @@
 import { createPlanarUavClassicalController } from '../controllers/planarUavClassicalController.js';
+import { createPlanarUavPredictiveGovernor } from '../controllers/planarUavPredictiveGovernor.js';
 import { createPlanarUavEkf } from '../estimation/planarUavEkf.js';
 import { createPlanarUavMeasurementSensor } from '../estimation/planarUavMeasurementSensor.js';
 import {
@@ -50,6 +51,22 @@ export const defaultPlanarUavScenario={
     processCovariance:[1e-5,1e-5,1e-6,3e-4,3e-4,4e-4],
     initialCovariance:[0.12,0.10,0.03,0.15,0.15,0.08],
   },
+  predictive:{
+    enabled:false,
+    horizon:8,
+    predictionDt:0.05,
+    thrustOffsets:[-0.9,-0.45,0,0.45,0.9],
+    torqueOffsets:[-0.08,-0.04,0,0.04,0.08],
+    qX:5,
+    qZ:9,
+    qVx:2,
+    qVz:3,
+    qTheta:2,
+    qQ:0.15,
+    rThrust:0.025,
+    rTorque:0.06,
+    rProposal:0.06,
+  },
   initialState:{x:0,z:1.55,theta:0,vx:0,vz:0,q:0},
   safety:{
     maxAbsXError:0.9,
@@ -79,6 +96,7 @@ function mergeScenario(cfg={}){
         ...(cfg.estimation?.noiseStd||{}),
       },
     },
+    predictive:{...defaultPlanarUavScenario.predictive,...(cfg.predictive||{})},
     initialState:{...defaultPlanarUavScenario.initialState,...(cfg.initialState||{})},
     safety:{...defaultPlanarUavScenario.safety,...(cfg.safety||{})},
   };
@@ -204,6 +222,13 @@ export function runPlanarUavClassicalBaseline(userCfg={}){
     ...cfg.controller,
     ...cfg.plant,
   });
+  const predictiveEnabled=Boolean(cfg.predictive.enabled);
+  const predictiveGovernor=predictiveEnabled?createPlanarUavPredictiveGovernor({
+    ...cfg.predictive,
+    ...cfg.plant,
+    ...cfg.safety,
+    dt:cfg.dt,
+  }):null;
 
   let state={...cfg.initialState};
   let estimator=createEstimator(cfg,state);
@@ -227,12 +252,49 @@ export function runPlanarUavClassicalBaseline(userCfg={}){
   const measurementError2=createStateErrorAccumulator();
   const estimateError2=createStateErrorAccumulator();
   let covarianceTraceSum=0;
+  let predictiveSolveMsSum=0;
+  let predictiveSolveMsMax=0;
+  let predictiveFeasibleCount=0;
+  let predictiveFallbackCount=0;
+  let predictiveInterventions=0;
+  let predictedMaxXError=0;
+  let predictedMaxZError=0;
+  let predictedMaxTilt=0;
+  let predictedMaxVx=0;
+  let predictedMaxVz=0;
 
   const start=performance.now();
   for(let k=0;k<=steps;k+=1){
     const t=k*cfg.dt;
     const reference=planarUavReference(t,cfg);
-    const command=controller.update(estimator.controllerState,reference);
+    const proposal=controller.update(estimator.controllerState,reference);
+    let command=proposal;
+    let predictiveDiagnostics=null;
+    if(predictiveEnabled){
+      const selected=predictiveGovernor.select({
+        state:estimator.controllerState,
+        time:t,
+        proposal,
+        referenceAt:(futureTime)=>planarUavReference(futureTime,cfg),
+        baselineAt:(rolloutState,rolloutReference)=>controller.update(rolloutState,rolloutReference),
+        plantCfg:cfg.plant,
+      });
+      command={...proposal,...selected.command};
+      predictiveDiagnostics=selected.diagnostics;
+      predictiveSolveMsSum+=predictiveDiagnostics.solveMs;
+      predictiveSolveMsMax=Math.max(predictiveSolveMsMax,predictiveDiagnostics.solveMs);
+      if(predictiveDiagnostics.predictedFeasible) predictiveFeasibleCount+=1;
+      if(predictiveDiagnostics.fallbackUsed) predictiveFallbackCount+=1;
+      if(
+        Math.abs(command.thrust-proposal.thrust)>1e-12 ||
+        Math.abs(command.torque-proposal.torque)>1e-12
+      ) predictiveInterventions+=1;
+      predictedMaxXError=Math.max(predictedMaxXError,predictiveDiagnostics.predictedMaxXError??0);
+      predictedMaxZError=Math.max(predictedMaxZError,predictiveDiagnostics.predictedMaxZError??0);
+      predictedMaxTilt=Math.max(predictedMaxTilt,predictiveDiagnostics.predictedMaxTilt??0);
+      predictedMaxVx=Math.max(predictedMaxVx,predictiveDiagnostics.predictedMaxVx??0);
+      predictedMaxVz=Math.max(predictedMaxVz,predictiveDiagnostics.predictedMaxVz??0);
+    }
     const xError=reference.x-state.x;
     const zError=reference.z-state.z;
     const vxError=reference.vx-state.vx;
@@ -284,9 +346,25 @@ export function runPlanarUavClassicalBaseline(userCfg={}){
       vzError,
       desiredTheta:command.desiredTheta,
       attitudeError,
+      proposalThrust:proposal.thrust,
+      proposalTorque:proposal.torque,
       thrust:command.thrust,
       torque:command.torque,
       safetyViolation:violation,
+      predictiveEnabled,
+      predictiveFeasible:predictiveDiagnostics?.predictedFeasible??null,
+      predictiveFallbackUsed:predictiveDiagnostics?.fallbackUsed??false,
+      predictiveCost:predictiveDiagnostics?.cost??null,
+      predictiveSolveMs:predictiveDiagnostics?.solveMs??null,
+      predictiveThrustOffset:predictiveDiagnostics?.thrustOffset??null,
+      predictiveTorqueOffset:predictiveDiagnostics?.torqueOffset??null,
+      predictedMaxXError:predictiveDiagnostics?.predictedMaxXError??null,
+      predictedMaxZError:predictiveDiagnostics?.predictedMaxZError??null,
+      predictedMaxTilt:predictiveDiagnostics?.predictedMaxTilt??null,
+      predictedMaxVx:predictiveDiagnostics?.predictedMaxVx??null,
+      predictedMaxVz:predictiveDiagnostics?.predictedMaxVz??null,
+      predictiveCandidateCount:predictiveDiagnostics?.candidateCount??null,
+      predictiveFeasibleCount:predictiveDiagnostics?.feasibleCount??null,
       estimationEnabled:estimator.enabled,
       measurementX:estimator.measurement?.x??null,
       measurementZ:estimator.measurement?.z??null,
@@ -362,6 +440,17 @@ export function runPlanarUavClassicalBaseline(userCfg={}){
       averageCovarianceTrace:estimator.enabled
         ?covarianceTraceSum/n
         :null,
+      predictiveEnabled,
+      predictiveAverageSolveMs:predictiveEnabled?predictiveSolveMsSum/n:null,
+      predictiveMaxSolveMs:predictiveEnabled?predictiveSolveMsMax:null,
+      predictiveFeasibilityRate:predictiveEnabled?100*predictiveFeasibleCount/n:null,
+      predictiveFallbackCount:predictiveEnabled?predictiveFallbackCount:0,
+      predictiveInterventions:predictiveEnabled?predictiveInterventions:0,
+      predictedMaxXError:predictiveEnabled?predictedMaxXError:null,
+      predictedMaxZError:predictiveEnabled?predictedMaxZError:null,
+      predictedMaxTilt:predictiveEnabled?predictedMaxTilt:null,
+      predictedMaxVx:predictiveEnabled?predictedMaxVx:null,
+      predictedMaxVz:predictiveEnabled?predictedMaxVz:null,
     },
   };
 }
