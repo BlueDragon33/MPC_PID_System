@@ -53,3 +53,11 @@ jobs:
         run: node scripts/ugvLtvHorizonSensitivity.mjs
       - name: UGV closed-loop probe
         run: node scripts/ugvClosedLoopProbe.mjs
+      - name: Gate 5A strict closeout
+        run: node scripts/ugvGate5aCloseout.mjs
+      - name: Full legacy + research smoke
+        run: npm run smoke
+      - name: Full research benchmark
+        run: npm run benchmark
+      - name: Web-app build
+        run: npm run build -- --base=./
