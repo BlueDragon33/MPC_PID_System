@@ -49,5 +49,7 @@ jobs:
         run: node scripts/ugvEkfSmoke.mjs
       - name: UGV LTV constrained-QP smoke
         run: node scripts/ugvLtvQpSmoke.mjs
+      - name: UGV LTV horizon sensitivity
+        run: node scripts/ugvLtvHorizonSensitivity.mjs
       - name: UGV closed-loop probe
         run: node scripts/ugvClosedLoopProbe.mjs
