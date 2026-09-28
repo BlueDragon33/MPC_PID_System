@@ -376,17 +376,64 @@ compute ratio:                           1.194
 
 Kết luận: prediction đáng giá trong scenario UGV hiện tại vì tracking cải thiện lớn hơn mức tăng compute, nhưng đây vẫn chỉ là một plant/scenario; chưa được phép tổng quát hóa thành kết luận NMPC.
 
-#### Gate 5D — UAV planar/attitude nonlinear classical baseline — NEXT
+#### Gate 5D — UAV planar/attitude nonlinear classical baseline — PASS
 
-Sau khi UGV pipeline 5A–5C PASS, bước tiếp theo là:
+Đã triển khai nonlinear 6-state planar UAV:
 
-1. mô hình UAV planar/attitude nonlinear có state/input rõ,
-2. classical stabilizing baseline trước,
-3. deterministic scenarios + safety envelope,
-4. quality/compute metrics,
-5. estimator/predictive layers chỉ thêm sau baseline PASS.
+```text
+state = [x, z, theta, vx, vz, q]
+input = [thrust, torque]
 
-Sau UAV planar mới chuyển USV planar.
+x_dot     = vx
+z_dot     = vz
+theta_dot = q
+vx_dot    = -(T/m) sin(theta) - d_x vx
+vz_dot    =  (T/m) cos(theta) - g - d_z vz
+q_dot     = tau/I - d_q q
+```
+
+Classical baseline dùng cascaded control:
+
+- outer loop position/velocity tạo desired horizontal/vertical acceleration,
+- desired pitch được suy ra từ thrust vector,
+- thrust magnitude bù gravity + tracking demand,
+- attitude PD inner loop điều khiển torque,
+- hard thrust/torque bounds,
+- deterministic forward-flight + altitude-wave scenario,
+- actual safety audit tách khỏi tracking metrics.
+
+Regression đại diện:
+
+```text
+x RMSE:                 0.2158 m
+z RMSE:                 0.0725 m
+vx RMSE:                0.1757 m/s
+vz RMSE:                0.0611 m/s
+attitude tracking RMSE: 0.0184 rad
+max |x error|:          0.5790 m
+max |z error|:          0.3535 m
+max |tilt|:             0.1588 rad
+unsafe samples:         0
+final vx:               1.1000 m/s
+final altitude:         2.0122 m
+final x:                19.6643 m
+runner compute/step:    ~10.03 us
+```
+
+Compute/step chỉ là simulation timing trên CI runner, không phải hardware real-time claim.
+
+#### Gate 5E — UAV planar nonlinear state estimation — NEXT
+
+Thứ tự tiếp theo:
+
+1. deterministic noisy measurements cho planar UAV state,
+2. nonlinear estimator phù hợp với model planar,
+3. controller dùng estimated state, ground truth chỉ dành cho plant/audit,
+4. same-seed determinism + different-seed sensitivity,
+5. RMSE/covariance/safety regression,
+6. chỉ sau estimator PASS mới thêm predictive layer cho UAV.
+
+Sau UAV planar estimation/predictive pipeline mới chuyển USV planar.
 
 Không nhảy vào full 6-DOF UAV trước planar models PASS.
 
@@ -455,7 +502,9 @@ UGV nonlinear state estimation    PASS
       ↓
 constrained predictive comparison PASS
       ↓
-UAV planar / attitude baseline     NEXT
+UAV planar / attitude baseline     PASS
+      ↓
+UAV nonlinear state estimation    NEXT
       ↓
 USV planar model
 ```
