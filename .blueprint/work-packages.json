@@ -170,7 +170,7 @@
     {
       "id": "RWP05A",
       "title": "Gate 5A — UGV kinematic bicycle + classical baseline",
-      "status": "ACTIVE",
+      "status": "PASS",
       "dependsOn": [
         "WP06R"
       ],
@@ -182,6 +182,32 @@
         "quality-compute-metrics",
         "full-regression",
         "web-build"
+      ],
+      "evidence": [
+        "nonlinear 4-state kinematic bicycle model",
+        "classical Stanley-style lateral control + PID speed loop",
+        "deterministic S-path scenario",
+        "cross-track RMSE 0.3058 m; heading RMSE 0.0782 rad; speed RMSE 0.6415 m/s",
+        "max cross-track error 0.65 m; unsafe samples 0; steering-rate bounded at 0.9 rad/s",
+        "final speed 4.005 m/s; final x 84.945 m",
+        "compute ~7.1 us/step on GitHub runner; not a hardware real-time claim",
+        "Gate 5A workflow + full smoke + full benchmark + web build PASS"
+      ],
+      "productionAuthority": false
+    },
+    {
+      "id": "RWP05B",
+      "title": "Gate 5B — nonlinear state estimation for UGV bicycle",
+      "status": "QUEUED",
+      "dependsOn": [
+        "RWP05A"
+      ],
+      "gates": [
+        "nonlinear-estimator-contract",
+        "no-ground-truth-leak",
+        "deterministic-noise",
+        "closed-loop-estimation",
+        "safety-audit"
       ],
       "evidence": [],
       "productionAuthority": false
