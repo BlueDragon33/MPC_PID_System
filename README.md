@@ -147,6 +147,24 @@ final speed:      4.005 m/s
 
 Steering angle, steering-rate, acceleration and speed are bounded explicitly. CI simulation timing is recorded for comparison only and is not treated as a hardware real-time claim.
 
+### Nonlinear UGV EKF estimation
+
+Gate 5B routes the nonlinear UGV controller through a 4-state EKF `[x, y, yaw, v]` with deterministic noisy measurements.
+
+Representative regression:
+
+```text
+measurement RMSE x/y/yaw/v:
+0.1849 / 0.1762 / 0.03465 / 0.1218
+
+EKF RMSE x/y/yaw/v:
+0.03861 / 0.03504 / 0.00835 / 0.03393
+
+unsafe samples: 0
+```
+
+Ground truth is reserved for plant propagation and audit; steering/speed control consumes estimated state when Gate 5B estimation is enabled.
+
 ### Reproducible experiments
 
 Preset hiện có gồm:
@@ -210,7 +228,8 @@ src/core/
 - Linear Kalman state estimation + covariance-aware safety — PASS
 - Model mismatch + disturbance-state estimation — PASS
 - Nonlinear UGV bicycle + classical baseline — PASS
-- **UGV nonlinear state estimation — NEXT**
+- UGV nonlinear state estimation — PASS
+- **UGV constrained predictive control comparison — NEXT**
 - UAV planar / USV planar models — LATER
 - NMPC — LATER
 - Adaptive / Learning MPC — LATER

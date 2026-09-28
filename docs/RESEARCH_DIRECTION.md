@@ -285,15 +285,58 @@ runner compute/step:   ~7.1 us
 
 Compute/step ở đây chỉ là simulation timing trên CI runner, **không phải tuyên bố hardware real-time**.
 
-#### Gate 5B — Nonlinear state estimation for UGV bicycle — NEXT
+#### Gate 5B — Nonlinear state estimation for UGV bicycle — PASS
 
-Bước tiếp theo:
+Đã triển khai:
 
-1. tạo noisy measurements phù hợp cho `x/y/yaw/v`,
-2. estimator phải dùng nonlinear motion model,
-3. không để controller đọc ground truth,
-4. deterministic seed + RMSE/covariance/innovation diagnostics,
-5. chỉ sau khi estimator PASS mới so constrained predictive control trên nonlinear plant.
+- deterministic noisy sensor cho `x/y/yaw/v`,
+- 4-state EKF dùng nonlinear bicycle prediction + Jacobian,
+- sequential Joseph-form covariance update,
+- angle innovation được wrap đúng miền `[-π, π]`,
+- controller chỉ dùng estimated state,
+- ground truth chỉ dùng cho plant transition + audit,
+- same-seed deterministic trace,
+- different seed làm measurement/estimate/command trace thay đổi,
+- RMSE + covariance + safety metrics.
+
+Kết quả đại diện:
+
+```text
+measurement RMSE:
+  x:   0.1849 m
+  y:   0.1762 m
+  yaw: 0.03465 rad
+  v:   0.1218 m/s
+
+EKF RMSE:
+  x:   0.03861 m
+  y:   0.03504 m
+  yaw: 0.00835 rad
+  v:   0.03393 m/s
+
+truth-state baseline:
+  cross-track RMSE: 0.30582 m
+  heading RMSE:     0.07819 rad
+  speed RMSE:       0.64153 m/s
+
+estimated-state loop:
+  cross-track RMSE: 0.30780 m
+  heading RMSE:     0.07872 rad
+  speed RMSE:       0.64031 m/s
+  unsafe samples:   0
+  avg covariance trace: 0.00720
+```
+
+#### Gate 5C — Constrained predictive control comparison on nonlinear UGV — NEXT
+
+Chỉ sau Gate 5B PASS mới được:
+
+1. xây nonlinear prediction rollout cho UGV,
+2. giữ classical controller làm baseline bắt buộc,
+3. áp steering/steering-rate/acceleration/speed constraints rõ ràng,
+4. so tracking quality với compute cost,
+5. audit actual nonlinear plant safety tách khỏi predicted feasibility,
+6. giữ deterministic reproducible scenarios.
 
 Sau UGV pipeline mới chuyển:
 - UAV planar/attitude,
@@ -362,9 +405,9 @@ UGV bicycle nonlinear model        PASS
       ↓
 classical path/speed baseline      PASS
       ↓
-UGV nonlinear state estimation    NEXT
+UGV nonlinear state estimation    PASS
       ↓
-constrained predictive comparison
+constrained predictive comparison NEXT
       ↓
 UAV planar / attitude model
       ↓
