@@ -467,18 +467,74 @@ estimated-state closed loop:
 
 Gate 5E workflow, full smoke, full benchmark, web build và release-readiness candidate đều PASS trên implementation head.
 
-#### Gate 5F — UAV planar constrained predictive comparison — NEXT
+#### Gate 5F — UAV planar constrained predictive comparison — PASS
 
-Bước kế tiếp là thêm predictive layer **sau** estimator đã PASS, vẫn giữ classical estimated-state controller làm baseline bắt buộc:
+Đã triển khai predictive layer sau EKF Gate 5E, với classical estimated-state controller vẫn là baseline bắt buộc.
 
-1. nonlinear finite-horizon prediction trên planar UAV,
-2. hard thrust/torque và safety-envelope feasibility,
-3. predicted feasibility tách khỏi actual plant safety,
-4. cùng estimator seed/config để A/B công bằng,
-5. đo tracking quality, control effort và compute cost,
-6. không gọi là NMPC nếu chưa tối ưu full nonlinear control sequence bằng nonlinear-program solver.
+Thiết kế:
 
-Chỉ sau UAV planar estimation + predictive pipeline mới chuyển USV planar.
+- finite candidate **policy offsets** quanh thrust/torque proposal của classical controller,
+- nonlinear rollout trực tiếp bằng planar UAV model,
+- hard thrust/torque bounds,
+- predicted feasibility cho x/z tracking error, tilt, vx/vz và altitude envelope,
+- predicted feasibility audit tách khỏi actual plant safety,
+- A/B dùng cùng estimator seed/config,
+- đo tracking, control effort và compute cost,
+- không gọi là NMPC vì chưa tối ưu full nonlinear control sequence và chưa có NLP solver/warm start.
+
+A/B đại diện trên Gate 5F CI:
+
+```text
+classical estimated-state:
+  x RMSE:                 0.22000 m
+  z RMSE:                 0.07212 m
+  vx RMSE:                0.17554 m/s
+  vz RMSE:                0.06235 m/s
+  attitude tracking RMSE: 0.01937 rad
+  control effort:         0.01063
+  unsafe samples:         0
+  compute/step:           119.24 us
+
+predictive governor:
+  x RMSE:                 0.21934 m
+  z RMSE:                 0.07874 m
+  vx RMSE:                0.17398 m/s
+  vz RMSE:                0.05311 m/s
+  attitude tracking RMSE: 0.01910 rad
+  control effort:         0.00782
+  unsafe samples:         0
+  compute/step:           156.22 us
+  avg governor solve:     0.05766 ms
+  max governor solve:     1.21786 ms
+  predicted feasibility:  100%
+  fallback:               0
+  interventions:          1584
+```
+
+Trade-off:
+
+```text
+x RMSE ratio predictive/classical:        0.997
+z RMSE ratio:                              1.092
+vx RMSE ratio:                             0.991
+vz RMSE ratio:                             0.852
+attitude RMSE ratio:                       0.986
+control-effort ratio:                      0.735
+compute ratio:                             1.310
+```
+
+Kết luận Gate 5F: predictive layer giảm control effort và cải thiện x/vx/vz/attitude trong scenario hiện tại, nhưng z RMSE tăng khoảng 9.18% và compute tăng khoảng 31%. Đây là trade-off thực nghiệm của một planar scenario, không phải kết luận tổng quát cho UAV hay NMPC.
+
+#### Gate 5G — USV planar nonlinear classical baseline — NEXT
+
+Bước kế tiếp:
+
+1. xác lập nonlinear planar USV model + state/input contract,
+2. deterministic reference/path scenario,
+3. classical heading/speed baseline,
+4. hard actuator envelope + actual safety audit,
+5. quality/compute metrics + reproducible regression,
+6. chỉ thêm estimator/predictive layer sau khi baseline USV PASS.
 
 Không nhảy vào full 6-DOF UAV trước planar models PASS.
 
@@ -551,9 +607,9 @@ UAV planar / attitude baseline     PASS
       ↓
 UAV nonlinear state estimation    PASS
       ↓
-UAV constrained predictive layer  NEXT
+UAV constrained predictive layer  PASS
       ↓
-USV planar model
+USV planar baseline               NEXT
 ```
 
 Không nhảy thẳng vào full 6-DOF UAV hoặc NMPC trước khi UGV bicycle model có baseline, reproducible scenario, safety audit và compute metrics.
