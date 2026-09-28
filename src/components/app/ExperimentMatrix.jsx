@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { BarChart3, CheckCircle2, Database, FlaskConical, Play, RotateCcw, ShieldCheck } from 'lucide-react';
 import { applyExperimentPreset, defaultConfig, executeExperimentMatrix, EXPERIMENT_PRESETS } from '../../application/workbench.js';
 import './experimentMatrix.css';
+import UgvResearchLab from './UgvResearchLab.jsx';
 
 const DEFAULT_PRESETS = ['baseline', 'safety-envelope', 'noisy-estimation', 'mismatch-observer'];
 const fmt = (value, digits = 2) => Number.isFinite(value) ? value.toFixed(digits) : '—';
@@ -85,6 +86,8 @@ export default function ExperimentMatrix({
         </div>
       </div>
     </section>
+
+    <UgvResearchLab/>
 
     <section className="matrix-quick-grid">
       {EXPERIMENT_PRESETS.map((preset) => <article key={preset.id} className={`matrix-quick-card ${preset.id === presetId ? 'active' : ''}`}>
