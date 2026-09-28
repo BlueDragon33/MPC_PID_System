@@ -183,6 +183,27 @@ fallback:            0
 
 This is intentionally **not labeled NMPC**: it does not optimize a full nonlinear control sequence and has no nonlinear-program warm start/solver yet.
 
+
+### Nonlinear UAV planar classical baseline
+
+Gate 5D adds a nonlinear 6-state planar UAV model `[x, z, theta, vx, vz, q]` driven by thrust and pitch torque. The baseline is classical cascaded control: position/velocity outer loop → desired pitch/thrust → attitude PD inner loop.
+
+Representative deterministic regression:
+
+```text
+x RMSE:                 0.2158 m
+z RMSE:                 0.0725 m
+vx RMSE:                0.1757 m/s
+vz RMSE:                0.0611 m/s
+attitude tracking RMSE: 0.0184 rad
+unsafe samples:         0
+final vx:               1.1000 m/s
+final altitude:         2.0122 m
+compute/step:            ~10.03 us on CI runner
+```
+
+Hard thrust/torque bounds and the actual safety envelope are audited explicitly. This timing is simulation evidence only, not a hardware real-time claim.
+
 ### Reproducible experiments
 
 Preset hiện có gồm:
@@ -248,7 +269,8 @@ src/core/
 - Nonlinear UGV bicycle + classical baseline — PASS
 - UGV nonlinear state estimation — PASS
 - UGV constrained predictive control comparison — PASS
-- **UAV planar/attitude classical baseline — NEXT**
+- UAV planar/attitude classical baseline — PASS
+- **UAV planar nonlinear state estimation — NEXT**
 - USV planar model — LATER
 - NMPC — LATER
 - Adaptive / Learning MPC — LATER
