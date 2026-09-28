@@ -24,21 +24,23 @@ export function assertExperimentMatrixContract(matrix) {
   return matrix;
 }
 
+export function assertUgvResultContract(result, label = 'UGV result') {
+  if (!result || typeof result !== 'object') throw new Error(`${label} must be an object.`);
+  if (!['CLASSICAL', 'LTV_MPC'].includes(result.mode)) throw new Error(`${label} has an unsupported mode.`);
+  if (!Array.isArray(result.samples) || !Array.isArray(result.solverRecords)) {
+    throw new Error(`${label} is missing samples or solverRecords.`);
+  }
+  if (!result.metrics || !result.config) throw new Error(`${label} is missing metrics or config.`);
+  return result;
+}
+
 export function assertUgvComparisonContract(results) {
   if (!Array.isArray(results) || results.length !== 2) {
     throw new Error('UGV comparison must contain CLASSICAL and LTV_MPC results.');
   }
-  const modes = new Set(results.map((result) => result?.mode));
+  const modes = new Set(results.map((result, index) => assertUgvResultContract(result, `UGV result[${index}]`).mode));
   if (!modes.has('CLASSICAL') || !modes.has('LTV_MPC')) {
     throw new Error('UGV comparison is missing CLASSICAL or LTV_MPC.');
-  }
-  for (const [index, result] of results.entries()) {
-    if (!Array.isArray(result.samples) || !Array.isArray(result.solverRecords)) {
-      throw new Error(`UGV result[${index}] is missing samples or solverRecords.`);
-    }
-    if (!result.metrics || !result.config) {
-      throw new Error(`UGV result[${index}] is missing metrics or config.`);
-    }
   }
   return results;
 }
