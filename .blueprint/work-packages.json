@@ -120,7 +120,7 @@
     {
       "id": "WP06",
       "title": "Resilience, offline and recovery",
-      "status": "ACTIVE",
+      "status": "PASS",
       "dependsOn": [
         "WP05"
       ],
@@ -129,7 +129,12 @@
         "restore",
         "failure-mode"
       ],
-      "evidence": []
+      "evidence": [
+        "schema-versioned workbench recovery survives reload and rejects corrupt payloads",
+        "service worker caches app shell and loaded Vite assets",
+        "headless Chrome offline test PASS after preview server is stopped",
+        "standalone build contains service worker, manifest and favicon"
+      ]
     },
     {
       "id": "WP07",
@@ -144,7 +149,8 @@
         "artifact",
         "post-deploy-smoke"
       ],
-      "evidence": []
+      "evidence": [],
+      "requiresExplicitOwnerRelease": true
     }
   ]
 }
