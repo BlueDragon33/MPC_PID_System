@@ -79,7 +79,8 @@
       "name": "orchestration",
       "paths": [
         "src/core/simulator.js",
-        "src/core/experiments/**"
+        "src/core/experiments/**",
+        "src/core/orchestration/**"
       ],
       "role": "Closed-loop composition and reproducible experiment execution.",
       "allowedDependencies": [
