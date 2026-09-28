@@ -51,3 +51,32 @@ console.log('UGV comparison ratios', {
   ltvVsClassicalEffortTruth: ltvTruth.metrics.controlEffort / classicalTruth.metrics.controlEffort,
   ltvVsClassicalEffortEkf: ltvEkf.metrics.controlEffort / classicalEkf.metrics.controlEffort,
 });
+
+
+function solverAudit(label, result) {
+  const byStatus = {};
+  const byWorst = {};
+  for (const record of result.solverRecords) {
+    byStatus[record.status] = (byStatus[record.status] || 0) + 1;
+    const kind = record.diagnostics?.worstViolation?.kind || 'none';
+    byWorst[kind] = (byWorst[kind] || 0) + 1;
+  }
+  const failures = result.solverRecords
+    .filter((record) => record.fallbackUsed)
+    .slice(0, 12)
+    .map((record) => ({
+      t: record.t.toFixed(2),
+      status: record.status,
+      violation: record.diagnostics?.feasibilityViolation?.toExponential(3) ?? 'n/a',
+      worst: record.diagnostics?.worstViolation?.kind ?? 'none',
+      stage: record.diagnostics?.worstViolation?.stage ?? '—',
+      residual: record.diagnostics?.projectedGradientResidual?.toExponential(3) ?? 'n/a',
+      iterations: record.diagnostics?.iterations ?? 0,
+    }));
+  console.log(`${label} solver status`, byStatus);
+  console.log(`${label} worst-constraint counts`, byWorst);
+  if (failures.length) console.table(failures);
+}
+
+solverAudit('LTV truth', ltvTruth);
+solverAudit('LTV EKF', ltvEkf);
