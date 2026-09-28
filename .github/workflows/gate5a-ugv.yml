@@ -1,0 +1,63 @@
+name: MPC PID Gate 5A UGV
+
+on:
+  pull_request:
+    paths:
+      - ".blueprint/**"
+      - "src/core/models/kinematicBicycle.js"
+      - "src/core/models/ugvReferencePath.js"
+      - "src/core/controllers/ugvClassicalController.js"
+      - "src/core/estimation/ugvExtendedKalmanFilter.js"
+      - "src/core/mpc/ugvLtvMpc.js"
+      - "src/core/solvers/genericConstrainedQP.js"
+      - "src/core/orchestration/ugv**"
+      - "scripts/ugv*.mjs"
+      - "docs/RESEARCH_DIRECTION.md"
+      - "README.md"
+      - ".github/workflows/gate5a-ugv.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  gate5a:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Resolve approved dependency graph
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f package-lock.json
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+          actual="$(sha256sum package-lock.json | awk '{print $1}')"
+          expected="$(node -e "const p=require('./.blueprint/dependency-lock.json'); process.stdout.write(p.expectedLockSha256 || '')")"
+          if [[ "$actual" != "$expected" ]]; then
+            echo "::error::Dependency graph drift. Expected $expected, got $actual"
+            exit 1
+          fi
+          npm ci --no-audit --no-fund
+      - name: Architecture boundary gate
+        run: node scripts/architectureCheck.mjs
+      - name: UGV bicycle domain smoke
+        run: node scripts/ugvBicycleModelSmoke.mjs
+      - name: UGV EKF smoke
+        run: node scripts/ugvEkfSmoke.mjs
+      - name: UGV LTV constrained-QP smoke
+        run: node scripts/ugvLtvQpSmoke.mjs
+      - name: UGV LTV horizon sensitivity
+        run: node scripts/ugvLtvHorizonSensitivity.mjs
+      - name: UGV closed-loop probe
+        run: node scripts/ugvClosedLoopProbe.mjs
+      - name: Gate 5A strict closeout
+        run: node scripts/ugvGate5aCloseout.mjs
+      - name: Full legacy + research smoke
+        run: npm run smoke
+      - name: Full research benchmark
+        run: npm run benchmark
+      - name: Web-app build
+        run: npm run build -- --base=./
