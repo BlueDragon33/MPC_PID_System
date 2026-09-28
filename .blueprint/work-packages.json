@@ -198,7 +198,7 @@
     {
       "id": "RWP05B",
       "title": "Gate 5B — nonlinear state estimation for UGV bicycle",
-      "status": "QUEUED",
+      "status": "ACTIVE",
       "dependsOn": [
         "RWP05A"
       ],
