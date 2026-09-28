@@ -23,18 +23,18 @@ export function createPlanarUavPredictiveGovernor(cfg={}){
   const maxAbsVz=cfg.maxAbsVz??2.5;
   const minAltitude=cfg.minAltitude??0.5;
   const maxAltitude=cfg.maxAltitude??3.2;
-  const thrustOffsets=normalizeOffsets(cfg.thrustOffsets,[-0.9,-0.45,0,0.45,0.9]);
+  const thrustOffsets=normalizeOffsets(cfg.thrustOffsets,[-0.18,0,0.18]);
   const torqueOffsets=normalizeOffsets(cfg.torqueOffsets,[-0.08,-0.04,0,0.04,0.08]);
   const weights={
     x:cfg.qX??5,
-    z:cfg.qZ??9,
+    z:cfg.qZ??20,
     vx:cfg.qVx??2,
-    vz:cfg.qVz??3,
+    vz:cfg.qVz??8,
     theta:cfg.qTheta??2,
     q:cfg.qQ??0.15,
-    thrust:cfg.rThrust??0.025,
+    thrust:cfg.rThrust??0.5,
     torque:cfg.rTorque??0.06,
-    proposal:cfg.rProposal??0.06,
+    proposal:cfg.rProposal??0.12,
   };
 
   function boundedCommand(command){
