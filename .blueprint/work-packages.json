@@ -225,7 +225,7 @@
     {
       "id": "RWP05C",
       "title": "Gate 5C — constrained predictive control comparison on nonlinear UGV",
-      "status": "QUEUED",
+      "status": "ACTIVE",
       "dependsOn": [
         "RWP05B"
       ],
