@@ -11,6 +11,16 @@ const browser=await chromium.launch({headless:true});
 const page=await browser.newPage({viewport:{width:1440,height:900}});
 const consoleErrors=[];
 const pageErrors=[];
+const report={
+  baseUrl,
+  invalidImportRejected:false,
+  validImportAccepted:false,
+  storageFailureRecovered:false,
+  mobile:null,
+  consoleErrors,
+  pageErrors,
+  error:null,
+};
 page.on('console',(message)=>{ if(message.type()==='error') consoleErrors.push(message.text()); });
 page.on('pageerror',(error)=>pageErrors.push(error.message));
 
@@ -24,7 +34,7 @@ assert.equal(await page.locator('svg.timeseries-chart title').count()>0,true,'co
 assert.equal(await page.locator('svg.timeseries-chart desc').count()>0,true,'control chart must expose a textual description');
 
 for(const name of ['Analysis','Scenarios','Documentation','Settings','Simulation']){
-  await page.getByRole('button',{name}).click();
+  await page.getByRole('button',{name,exact:true}).click();
   await page.waitForTimeout(60);
 }
 assert.match(page.url(),/#simulation$/);
@@ -42,6 +52,7 @@ await page.locator('.hidden-file-input').setInputFiles({
 });
 await page.locator('.experiment-status').waitFor();
 assert.match(await page.locator('.experiment-status').innerText(),/Import failed:.*dt must be > 0/i);
+report.invalidImportRejected=true;
 
 const validPayload=JSON.stringify({
   schema:'mpc-pid-experiment/v1',
@@ -55,6 +66,7 @@ await page.locator('.hidden-file-input').setInputFiles({
   buffer:Buffer.from(validPayload),
 });
 assert.match(await page.locator('.experiment-status').innerText(),/Imported qa-valid\.json/);
+report.validImportAccepted=true;
 await page.getByRole('button',{name:/Run Simulation/i}).click();
 
 await page.evaluate(()=>{
@@ -62,6 +74,7 @@ await page.evaluate(()=>{
 });
 await page.getByRole('button',{name:'Save',exact:true}).click();
 assert.match(await page.locator('.experiment-status').innerText(),/Local storage is unavailable/i);
+report.storageFailureRecovered=true;
 
 await page.setViewportSize({width:390,height:844});
 await page.waitForTimeout(100);
@@ -74,6 +87,7 @@ const mobile=await page.evaluate(()=>({
 assert.equal(mobile.scrollWidth,mobile.viewport,'mobile baseline must not horizontally overflow');
 assert.equal(mobile.statusVisible,true,'mobile application status must remain visible');
 assert.equal(mobile.safetyVisible,true,'mobile actual-safety context must remain visible');
+report.mobile=mobile;
 
 await page.screenshot({path:path.join(outDir,'qa-e1-mobile-390.png'),fullPage:true});
 await page.setViewportSize({width:1440,height:900});
@@ -83,14 +97,6 @@ assert.deepEqual(pageErrors,[],'browser must not raise uncaught page errors');
 assert.deepEqual(consoleErrors,[],'browser must not emit console errors');
 
 await browser.close();
-fs.writeFileSync(path.join(outDir,'browser-report.json'),JSON.stringify({
-  baseUrl,
-  invalidImportRejected:true,
-  validImportAccepted:true,
-  storageFailureRecovered:true,
-  mobile,
-  consoleErrors,
-  pageErrors,
-},null,2)+'\n');
+fs.writeFileSync(path.join(outDir,'browser-report.json'),JSON.stringify(report,null,2)+'\n');
 
 console.log('QA-E1 browser acceptance: PASS');
