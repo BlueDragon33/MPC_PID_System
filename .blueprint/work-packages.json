@@ -470,6 +470,26 @@
       "productionAuthority": false
     },
     {
+      "id": "UI-E1",
+      "title": "UI-E1 — Current Visual + UX Audit",
+      "status": "ACTIVE",
+      "dependsOn": [
+        "WP06R"
+      ],
+      "track": "MPC_PID_FUTURE_PROFESSIONAL_INTERFACE_SYSTEM",
+      "gates": [
+        "current-main-ui-audit",
+        "cross-device-visual",
+        "responsive-overflow",
+        "scientific-wording",
+        "accessibility-baseline",
+        "presentation-regression",
+        "build"
+      ],
+      "evidence": [],
+      "productionAuthority": false
+    },
+    {
       "id": "WP07",
       "title": "Release hardening and exact-head evidence",
       "status": "QUEUED",
