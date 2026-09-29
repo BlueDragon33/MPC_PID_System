@@ -127,10 +127,10 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 .metric-table { width: 100%; overflow: auto; }
 .metric-row { display: grid; grid-template-columns: 1.45fr repeat(4,minmax(62px,1fr)); border-top: 1px solid #172b41; }
 .metric-row:first-child { border-top: 0; }
-.metric-row span { min-width: 0; padding: 7px 6px; color: #b8c5d4; font-size: 8.5px; text-align: center; border-left: 1px solid #17283b; }
+.metric-row span { min-width: 0; padding: 7px 6px; color: #b8c5d4; font-size: 11px; text-align: center; border-left: 1px solid #17283b; }
 .metric-row span:first-child { text-align: left; border-left: 0; color: #c9d5e2; }
 .metric-header { background: #112035; }
-.metric-header span { color: #8ea0b6; font-size: 7.5px; font-weight: 700; }
+.metric-header span { color: #8ea0b6; font-size: 11px; font-weight: 700; }
 .metric-highlight span:not(:first-child) { color: #52df83; font-weight: 800; }
 
 .health-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 10px 12px 12px; }
@@ -160,13 +160,13 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 .events-card { min-height: 153px; }
 .clear-button { color: #c2cfdd; background: #1a2c40; border: 1px solid #273d54; border-radius: 6px; padding: 4px 8px; font-size: 11px; }
 .recent-events { padding: 6px 12px 10px; }
-.recent-event { display: grid; grid-template-columns: 8px 43px 1fr; align-items: center; gap: 6px; min-height: 21px; color: #c0ccda; font-size: 8.5px; }
+.recent-event { display: grid; grid-template-columns: 8px 43px 1fr; align-items: center; gap: 6px; min-height: 21px; color: #c0ccda; font-size: 11px; }
 .recent-event time { color: #8295aa; }
 .event-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--cyan); }
 .event-dot.prediction-error { background: var(--red); }.event-dot.watchdog { background: var(--amber); }.event-dot.constraint,.event-dot.safety { background: var(--purple); }.event-dot.state-change { background: var(--cyan); }
 .empty-event { padding: 12px 0; color: #657990; font-size: 11px; }
 
-.app-footer { min-height: 35px; display: grid; grid-template-columns: auto 1fr auto; gap: 16px; align-items: center; padding: 7px 16px; border-top: 1px solid #17293d; background: #06101b; color: #60748c; font-size: 8.5px; }
+.app-footer { min-height: 35px; display: grid; grid-template-columns: auto 1fr auto; gap: 16px; align-items: center; padding: 7px 16px; border-top: 1px solid #17293d; background: #06101b; color: #60748c; font-size: 11px; }
 .app-footer span:nth-child(2) { text-align: left; }
 
 @media (max-width: 1440px) {
