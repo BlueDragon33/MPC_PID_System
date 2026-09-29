@@ -470,6 +470,58 @@
       "productionAuthority": false
     },
     {
+      "id": "UI-E1",
+      "title": "UI-E1 — Current Visual + UX Audit",
+      "status": "PASS",
+      "dependsOn": [
+        "WP06R"
+      ],
+      "track": "MPC_PID_FUTURE_PROFESSIONAL_INTERFACE_SYSTEM",
+      "gates": [
+        "current-main-ui-audit",
+        "cross-device-visual",
+        "responsive-overflow",
+        "scientific-wording",
+        "accessibility-baseline",
+        "presentation-regression",
+        "build"
+      ],
+      "evidence": [
+        "baseline visual audit run 36545499542 captured 1920/1440/1280/1024/768/430/390 screenshots",
+        "baseline found recurring sub-11px text, missing Research Context Header, missing theme control, and hidden mobile status",
+        "Research Context Header now exposes plant, controller, estimator, actual safety, and revision context",
+        "mobile status remains visible; navigation labels remain visible; keyboard focus remains explicit",
+        "hard-coded Solver 'Optimal' badge replaced by evidence-based Converged/Degraded/Fallback wording",
+        "authored UI CSS sub-11px declarations reduced to zero by presentation contract",
+        "dark/light theme control added with shell/component contrast verified by screenshot review",
+        "Development Live build receives VITE_BUILD_SHA for revision traceability",
+        "blocking Playwright visual audit covers 7 viewports in dark and light modes and checks overflow/context/status/readability",
+        "final visual audit run 36547093154 PASS with defects=[]; artifact 11022179976 contains 14 screenshots + report",
+        "Presentation Gate and Release Readiness run 36547093182 PASS on implementation head 174bd3c1a38ec779206b0a7ccdceb06b3a0a7de5",
+        "inherited architecture, research, safety, resilience and build regressions remain green",
+        "known deferred debt: mobile dashboard remains vertically long; deeper dashboard/navigation/design-system reconstruction belongs to later UI epochs"
+      ],
+      "productionAuthority": false
+    },
+    {
+      "id": "UI-E2",
+      "title": "UI-E2 — Design Token Foundation",
+      "status": "QUEUED",
+      "dependsOn": [
+        "UI-E1"
+      ],
+      "track": "MPC_PID_FUTURE_PROFESSIONAL_INTERFACE_SYSTEM",
+      "gates": [
+        "semantic-design-tokens",
+        "light-dark-token-contract",
+        "control-semantic-colors",
+        "backward-visual-compatibility",
+        "cross-device-visual"
+      ],
+      "evidence": [],
+      "productionAuthority": false
+    },
+    {
       "id": "WP07",
       "title": "Release hardening and exact-head evidence",
       "status": "QUEUED",

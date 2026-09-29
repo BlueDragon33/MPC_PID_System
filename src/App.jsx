@@ -1,5 +1,5 @@
 import React from 'react';
-import { BarChart3, BookOpen, CircleDot, Cpu, Database, Play, Settings } from 'lucide-react';
+import { BarChart3, BookOpen, CircleDot, Cpu, Database, Moon, Play, Settings, ShieldCheck, Sun } from 'lucide-react';
 import BatchAnalysis from './components/app/BatchAnalysis.jsx';
 import ControlSidebar from './components/app/ControlSidebar.jsx';
 import ExperimentMatrix from './components/app/ExperimentMatrix.jsx';
@@ -17,11 +17,19 @@ const navItems = [
   { id:'settings', label:'Settings', icon:Settings },
 ];
 
-function statusLabel(result){
-  if(!result?.metrics) return 'Idle';
-  if(result.metrics.fallbackCount>0) return 'Fallback';
-  if((result.metrics.convergenceRate??100)<99.9) return 'Degraded';
-  return 'Ready';
+const MODE_CONTEXT={
+  PID:'PID',
+  MPC:'MPC · Constrained QP',
+  HYBRID:'Event-triggered MPC + PID',
+  HYBRID_SAFE:'Event-triggered MPC + PID + Safety Governor',
+};
+
+function statusSummary(result){
+  if(!result?.metrics) return { key:'idle', label:'Idle' };
+  if((result.metrics.safetyViolationCount??0)>0) return { key:'degraded', label:'Unsafe observed' };
+  if((result.metrics.fallbackCount??0)>0) return { key:'fallback', label:'Completed · fallback' };
+  if((result.metrics.convergenceRate??100)<99.9) return { key:'degraded', label:'Completed · degraded' };
+  return { key:'ready', label:'Completed' };
 }
 
 export default function App(){
@@ -51,7 +59,19 @@ export default function App(){
   if(activeNav==='documentation') view=<DocumentationView/>;
   if(activeNav==='settings') view=<SettingsView draftCfg={draftCfg} setDraftCfg={setDraftCfg}/>;
 
-  const status = statusLabel(governed);
+  const [theme,setTheme]=React.useState(()=>{
+    try { return window.localStorage.getItem('mpc-pid-theme')||'dark'; }
+    catch { return 'dark'; }
+  });
+  React.useEffect(()=>{
+    document.documentElement.dataset.theme=theme;
+    try { window.localStorage.setItem('mpc-pid-theme',theme); } catch {}
+  },[theme]);
+
+  const status=statusSummary(governed);
+  const safetyViolations=governed?.metrics?.safetyViolationCount??0;
+  const estimatorLabel=runCfg.estimation?.enabled?'Kalman estimated-state':'Disabled';
+  const revision=(import.meta.env.VITE_BUILD_SHA||'local-dev').slice(0,10);
 
   return <div className="control-app">
     <header className="app-topbar">
@@ -69,10 +89,38 @@ export default function App(){
         ><Icon size={16} aria-hidden="true"/>{label}</button>)}
       </nav>
       <div className="app-status" aria-live="polite">
-        <span className={`status-pill status-${status.toLowerCase()}`}><CircleDot size={11} aria-hidden="true"/>{status}</span>
+        <span className={`status-pill status-${status.key}`}><CircleDot size={11} aria-hidden="true"/>{status.label}</span>
+        <button
+          type="button"
+          className="theme-control"
+          data-theme-control
+          aria-label={theme==='dark'?'Switch to light theme':'Switch to dark theme'}
+          onClick={()=>setTheme((current)=>current==='dark'?'light':'dark')}
+        >
+          {theme==='dark'?<Sun size={15} aria-hidden="true"/>:<Moon size={15} aria-hidden="true"/>}
+          <span>{theme==='dark'?'Light':'Dark'}</span>
+        </button>
         <span className="repo-mark"><Cpu size={19} aria-hidden="true"/>MPC_PID_System</span>
       </div>
     </header>
+
+    <section className="research-context-header" aria-label="Research context">
+      <div className="context-primary">
+        <span className="context-eyebrow">Research context</span>
+        <strong>Linear control benchmark</strong>
+        <span>Deterministic simulation workbench</span>
+      </div>
+      <dl className="context-grid">
+        <div><dt>Plant</dt><dd>Second-order plant</dd></div>
+        <div><dt>Controller</dt><dd>{MODE_CONTEXT[activeMode]||activeMode}</dd></div>
+        <div><dt>Estimator</dt><dd>{estimatorLabel}</dd></div>
+        <div className={safetyViolations===0?'context-safety safe':'context-safety unsafe'}>
+          <dt><ShieldCheck size={13} aria-hidden="true"/>Actual safety</dt>
+          <dd>{safetyViolations===0?'No violations observed':`${safetyViolations} violations observed`}</dd>
+        </div>
+        <div><dt>Revision</dt><dd><code>{revision}</code></dd></div>
+      </dl>
+    </section>
 
     <div className="app-layout">
       <ControlSidebar

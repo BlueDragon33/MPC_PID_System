@@ -30,6 +30,8 @@ jobs:
         run: npm install --no-audit --no-fund
 
       - name: Build standalone static web-app
+        env:
+          VITE_BUILD_SHA: ${{ github.sha }}
         run: npm run build -- --base=./
 
       - name: Detect GitHub Pages availability
