@@ -1,0 +1,45 @@
+name: MPC PID QA-E2 Control Contracts
+
+on:
+  pull_request:
+    paths:
+      - ".blueprint/**"
+      - "src/contracts/**"
+      - "src/core/models/**"
+      - "src/core/controllers/**"
+      - "src/core/estimation/**"
+      - "src/core/solvers/**"
+      - "src/core/safety/**"
+      - "src/core/orchestration/**"
+      - "src/core/experiments/**"
+      - "scripts/qaControlContractRegression.mjs"
+      - "docs/QA_CONTROL_CONTRACTS.md"
+      - ".github/workflows/qa-e2-control-contracts.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  qa-control-contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install
+        run: npm install --no-audit --no-fund
+      - name: QA-E2 plant controller estimator solver safety contracts
+        run: node scripts/qaControlContractRegression.mjs
+      - name: Architecture boundary
+        run: node scripts/architectureCheck.mjs
+      - name: Orchestration contract
+        run: node scripts/orchestrationContractSmoke.mjs
+      - name: QA baseline regression
+        run: node scripts/qaBaselineSmoke.mjs
+      - name: Full control and research regression
+        run: npm run smoke
+      - name: Build
+        run: npm run build
