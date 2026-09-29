@@ -1,10 +1,17 @@
+import {
+  assertFiniteNumber,
+  assertPidContract,
+} from '../../contracts/controlContracts.js';
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
 export function createPIDController(params, dt) {
+  assertPidContract(params,dt);
   let integral = 0;
   let prevError = 0;
 
   function calculate(target, value, dynamicLimits = null) {
+    assertFiniteNumber(target,'pid.target');
+    assertFiniteNumber(value,'pid.value');
     const e = target - value;
     const derivative = (e - prevError) / dt;
     const rawIntegral = integral + e * dt;
