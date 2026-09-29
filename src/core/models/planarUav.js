@@ -1,3 +1,7 @@
+import {
+  assertFiniteRecord,
+  assertPlanarUavConfigContract,
+} from '../../contracts/controlContracts.js';
 const clamp=(v,lo,hi)=>Math.max(lo,Math.min(hi,v));
 
 export function wrapPlanarAngle(angle){
@@ -10,7 +14,7 @@ export function wrapPlanarAngle(angle){
 export function createPlanarUavConfig(cfg={}){
   const mass=cfg.mass??1.4;
   const gravity=cfg.gravity??9.81;
-  return {
+  return assertPlanarUavConfigContract({
     dt:cfg.dt??0.01,
     mass,
     inertia:cfg.inertia??0.035,
@@ -21,10 +25,12 @@ export function createPlanarUavConfig(cfg={}){
     minThrust:cfg.minThrust??0,
     maxThrust:cfg.maxThrust??2.2*mass*gravity,
     maxTorque:cfg.maxTorque??0.7,
-  };
+  });
 }
 
 export function planarUavDerivatives(state,input,cfg={}){
+  assertFiniteRecord(state,['x','z','theta','vx','vz','q'],'uav.state');
+  assertFiniteRecord(input,['thrust','torque'],'uav.input');
   const p=createPlanarUavConfig(cfg);
   const thrust=clamp(input.thrust,p.minThrust,p.maxThrust);
   const torque=clamp(input.torque,-p.maxTorque,p.maxTorque);
