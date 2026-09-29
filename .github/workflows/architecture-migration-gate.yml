@@ -12,6 +12,9 @@ on:
       - "src/core/simulator.js"
       - "scripts/architectureCheck.mjs"
       - "scripts/orchestrationContractSmoke.mjs"
+      - "scripts/extensibilityAudit.mjs"
+      - "docs/ARCHITECTURE.md"
+      - "docs/EXTENSIBILITY_AUDIT.md"
       - ".github/workflows/architecture-*.yml"
   workflow_dispatch:
 
@@ -33,6 +36,8 @@ jobs:
         run: node scripts/architectureCheck.mjs
       - name: Orchestration contract gate
         run: node scripts/orchestrationContractSmoke.mjs
+      - name: Extensibility architecture audit
+        run: node scripts/extensibilityAudit.mjs
       - name: Control regression gate
         run: npm run smoke
       - name: Web-app build gate
