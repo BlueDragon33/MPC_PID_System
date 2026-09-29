@@ -615,3 +615,49 @@ USV planar baseline               NEXT
 Không nhảy thẳng vào full 6-DOF UAV hoặc NMPC trước khi UGV bicycle model có baseline, reproducible scenario, safety audit và compute metrics.
 
 External OSQP/WASM backend vẫn chỉ được thêm khi benchmark cho thấy solver hiện tại là bottleneck hoặc cần backend độc lập để đối chiếu numerical correctness ở constraint scale lớn hơn.
+
+
+#### Gate 5G — USV planar nonlinear classical baseline — PASS
+
+Đã triển khai nonlinear planar USV 6-state:
+
+```text
+state = [x, y, psi, u, v, r]
+input = [surge force, yaw moment]
+```
+
+Mô hình dùng body-frame surge/sway/yaw dynamics với linear + quadratic drag và planar coupling. Classical baseline gồm:
+
+- speed PID tạo surge-force proposal;
+- cross-track + path-heading guidance tạo desired heading;
+- heading PD tạo yaw moment;
+- hard surge-force/yaw-moment bounds;
+- surge-force/yaw-moment rate limits;
+- deterministic sinusoidal-path scenario;
+- actual plant safety audit tách khỏi tracking quality.
+
+Representative evidence trên implementation head:
+
+```text
+cross-track RMSE:       0.35737 m
+heading RMSE:           0.18222 rad
+speed RMSE:             0.28868 m/s
+max |cross-track|:      0.90000 m
+max |heading error|:    0.54606 rad
+max speed:              1.78693 m/s
+max |yaw rate|:         0.40217 rad/s
+max surge force:        31.20456 N
+max yaw moment:         12.10 N m
+unsafe samples:         0
+max actual violation:   0
+final surge speed:      1.78676 m/s
+final x:                56.29125 m
+```
+
+Gate 5G workflow, inherited full smoke/benchmark/build, safety/resilience gates và Release Readiness đều PASS trên implementation head `ef4d67ff95f94e2c110187a7c02e6bde6902c638`.
+
+Compute timing chỉ là simulation timing trên GitHub CI runner, không phải hardware real-time evidence.
+
+Classification của Gate 5G là **nonlinear classical baseline**. Chưa có estimator, predictive controller, MPC hoặc NMPC authority.
+
+Next scientific package được queue là **RWP05H — USV planar nonlinear state estimation**. Không được nhảy trực tiếp từ Gate 5G sang true NMPC.
