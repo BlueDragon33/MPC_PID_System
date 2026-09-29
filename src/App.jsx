@@ -107,7 +107,7 @@ export default function App(){
     <section className="research-context-header" aria-label="Research context">
       <div className="context-primary">
         <span className="context-eyebrow">Research context</span>
-        <strong>Linear control benchmark</strong>
+        <h1>Linear control benchmark</h1>
         <span>Deterministic simulation workbench</span>
       </div>
       <dl className="context-grid">
