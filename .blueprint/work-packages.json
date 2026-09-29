@@ -346,7 +346,7 @@
     {
       "id": "RWP05G",
       "title": "Gate 5G — USV planar nonlinear classical baseline",
-      "status": "ACTIVE",
+      "status": "PASS",
       "dependsOn": [
         "RWP05F"
       ],
@@ -356,6 +356,36 @@
         "deterministic-scenario",
         "safety-audit",
         "quality-compute-metrics"
+      ],
+      "evidence": [
+        "6-state nonlinear planar USV model [x,y,psi,u,v,r] with surge-force/yaw-moment inputs",
+        "body-frame kinematics with surge/sway/yaw drag and planar coupling",
+        "classical surge-speed PID plus cross-track/heading PD guidance baseline",
+        "hard surge-force/yaw-moment magnitude limits plus force/moment rate limits",
+        "deterministic sinusoidal-path scenario and reproducible command/state trace",
+        "actual closed-loop plant safety audited independently from tracking metrics",
+        "cross-track RMSE 0.35737 m; heading RMSE 0.18222 rad; speed RMSE 0.28868 m/s",
+        "max cross-track 0.9000 m; max heading error 0.54606 rad; max speed 1.78693 m/s; max |yaw rate| 0.40217 rad/s",
+        "max surge force 31.20456 N; max yaw moment 12.10 N m; actuator rate limits respected",
+        "unsafe samples 0; max actual safety violation 0",
+        "Gate 5G workflow run 36523899869 + inherited regression/benchmark/build + Release Readiness run 36523899830 PASS on implementation head ef4d67ff95f94e2c110187a7c02e6bde6902c638",
+        "classification: nonlinear classical baseline only; no estimator, predictive controller, MPC or NMPC authority"
+      ],
+      "productionAuthority": false
+    },
+    {
+      "id": "RWP05H",
+      "title": "Gate 5H — USV planar nonlinear state estimation",
+      "status": "QUEUED",
+      "dependsOn": [
+        "RWP05G"
+      ],
+      "gates": [
+        "nonlinear-usv-estimator-contract",
+        "no-ground-truth-leak",
+        "deterministic-noise",
+        "closed-loop-estimation",
+        "safety-audit"
       ],
       "evidence": [],
       "productionAuthority": false
