@@ -87,3 +87,32 @@ node scripts/extensibilityAudit.mjs
 ```
 
 The audit emits `mpc-pid-extensibility-audit/v1` evidence. It blocks Presentation→Core regression and requires the current three validated vehicle runtimes to remain accounted for. Missing registries/providers are reported as migration evidence, not falsely treated as a runtime defect.
+
+
+## Measured E1 evidence
+
+Architecture Migration Gate implementation-head evidence:
+
+```text
+vehicle-specific orchestrators:          3
+orchestration direct provider imports:  19
+Application direct Core imports:         9
+Presentation direct Core imports:        0
+Registry files under src:                0
+Provider-named files under src:          0
+Code manifest files under src:           0
+```
+
+Implementation head: `d23adbf57c6924a665400253795989bf3608feb8`
+
+Architecture Migration Gate run: `36543141580` — PASS.
+
+Release Readiness run: `36543141671` — PASS.
+
+All inherited UGV/UAV/USV research gates, Control Safety, Resilience, Architecture Boundaries, Presentation, Experiment Services, Fast CI and build remained green.
+
+## E1 conclusion
+
+The architecture is layered and regression-protected, but the extension boundary has not yet been introduced. The next justified migration is **E2 — Capability Descriptor Foundation**.
+
+E2 should define a small stable descriptor contract and adopt it in real existing implementations. It must not introduce a large registry/plugin runtime before descriptor semantics are proven.
