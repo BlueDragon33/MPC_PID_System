@@ -408,3 +408,5 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 .panel-empty-state { margin: 0; padding: 14px 12px; color: #7f93aa; font-size: 11px; line-height: 1.55; }
 .metric-row { grid-template-columns: 1.45fr minmax(100px,1fr); }
 button:disabled { cursor: not-allowed; opacity: .55; }
+.matrix-progress { padding: 8px 9px; border: 1px solid #315579; background: #0a1a2b; color: #9fc8ff; border-radius: 7px; font-size: 11px; line-height: 1.45; }
+:root[data-theme="light"] .matrix-progress { background: #eef6ff; color: #245b93; }

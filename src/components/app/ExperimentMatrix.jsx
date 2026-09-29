@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { BarChart3, CheckCircle2, Database, FlaskConical, Play, RotateCcw, ShieldCheck } from 'lucide-react';
-import { applyExperimentPreset, defaultConfig, executeExperimentMatrix, EXPERIMENT_PRESETS } from '../../application/workbench.js';
+import { applyExperimentPreset, defaultConfig, executeExperimentMatrixInWorker, EXPERIMENT_PRESETS } from '../../application/workbench.js';
 import './experimentMatrix.css';
 
 const DEFAULT_PRESETS = ['baseline', 'safety-envelope', 'noisy-estimation', 'mismatch-observer'];
@@ -25,6 +25,7 @@ export default function ExperimentMatrix({
   const [noiseText, setNoiseText] = useState('1');
   const [mismatchText, setMismatchText] = useState('1');
   const [error, setError] = useState('');
+  const [isRunning, setIsRunning] = useState(false);
   const seeds = useMemo(() => parseList(seedText, [20260914]), [seedText]);
   const noiseScales = useMemo(() => parseList(noiseText, [1]), [noiseText]);
   const mismatchScales = useMemo(() => parseList(mismatchText, [1]), [mismatchText]);
@@ -34,10 +35,12 @@ export default function ExperimentMatrix({
     ? current.filter((item) => item !== id)
     : [...current, id]);
 
-  const runMatrix = () => {
+  const runMatrix = async () => {
     try {
       setError('');
-      const result = executeExperimentMatrix({
+      setBatchResult(null);
+      setIsRunning(true);
+      const result = await executeExperimentMatrixInWorker({
         presetIds: selected,
         seeds,
         noiseScales,
@@ -47,6 +50,8 @@ export default function ExperimentMatrix({
       setBatchResult(result);
     } catch (matrixError) {
       setError(matrixError?.message || 'Experiment matrix failed.');
+    } finally {
+      setIsRunning(false);
     }
   };
 
@@ -61,26 +66,27 @@ export default function ExperimentMatrix({
       <div><span>EXPERIMENT MATRIX</span><h1>Batch scenarios and robustness sweeps</h1><p>Run the same safe hybrid controller across multiple presets, sensor seeds, noise levels and model-mismatch intensities. Results are summarized here and forwarded to Analysis.</p></div>
     </div>
 
-    <section className="matrix-builder dashboard-card">
+    <section className="matrix-builder dashboard-card" aria-busy={isRunning}>
       <div className="card-head"><div><FlaskConical size={16}/><strong>Matrix builder</strong></div><span className={`matrix-case-pill ${caseCount > 48 ? 'over' : ''}`}>{caseCount} / 48 cases</span></div>
       <div className="matrix-builder-body">
         <div className="matrix-preset-grid">
           {EXPERIMENT_PRESETS.map((preset) => {
             const checked = selected.includes(preset.id);
-            return <button type="button" key={preset.id} className={`matrix-preset ${checked ? 'selected' : ''}`} onClick={() => togglePreset(preset.id)}>
+            return <button type="button" key={preset.id} className={`matrix-preset ${checked ? 'selected' : ''}`} disabled={isRunning} onClick={() => togglePreset(preset.id)}>
               <span className="matrix-check">{checked ? <CheckCircle2 size={15}/> : <i/>}</span>
               <span><strong>{preset.label}</strong><small>{preset.description}</small></span>
             </button>;
           })}
         </div>
         <div className="matrix-dimensions">
-          <label><span>Seeds</span><input value={seedText} onChange={(e) => setSeedText(e.target.value)} placeholder="20260914, 20260915"/><small>comma-separated deterministic sensor seeds</small></label>
-          <label><span>Noise scale</span><input value={noiseText} onChange={(e) => setNoiseText(e.target.value)} placeholder="0.75, 1, 1.25"/><small>multiplies each preset's measurement σ</small></label>
-          <label><span>Mismatch scale</span><input value={mismatchText} onChange={(e) => setMismatchText(e.target.value)} placeholder="0.8, 1, 1.2"/><small>scales existing truth-plant mismatch away from nominal</small></label>
+          <label><span>Seeds</span><input value={seedText} disabled={isRunning} onChange={(e) => setSeedText(e.target.value)} placeholder="20260914, 20260915"/><small>comma-separated deterministic sensor seeds</small></label>
+          <label><span>Noise scale</span><input value={noiseText} disabled={isRunning} onChange={(e) => setNoiseText(e.target.value)} placeholder="0.75, 1, 1.25"/><small>multiplies each preset's measurement σ</small></label>
+          <label><span>Mismatch scale</span><input value={mismatchText} disabled={isRunning} onChange={(e) => setMismatchText(e.target.value)} placeholder="0.8, 1, 1.2"/><small>scales existing truth-plant mismatch away from nominal</small></label>
           <div className="matrix-actions">
-            <button type="button" className="matrix-run" disabled={!selected.length || caseCount > 48} onClick={runMatrix}><Play size={15}/>Run matrix</button>
-            <button type="button" className="matrix-reset" onClick={() => { setSelected(DEFAULT_PRESETS); setSeedText('20260914, 20260915'); setNoiseText('1'); setMismatchText('1'); setError(''); setBatchResult(null); }}><RotateCcw size={14}/>Reset dimensions</button>
+            <button type="button" className="matrix-run" disabled={isRunning || !selected.length || caseCount > 48} onClick={runMatrix}><Play size={15}/>{isRunning ? `Running ${caseCount} cases…` : 'Run matrix'}</button>
+            <button type="button" className="matrix-reset" disabled={isRunning} onClick={() => { setSelected(DEFAULT_PRESETS); setSeedText('20260914, 20260915'); setNoiseText('1'); setMismatchText('1'); setError(''); setBatchResult(null); }}><RotateCcw size={14}/>Reset dimensions</button>
           </div>
+          {isRunning && <div className="matrix-progress" role="status">Running in the background. You can keep using the workbench while results are computed.</div>}
           {error && <div className="matrix-error">{error}</div>}
         </div>
       </div>
