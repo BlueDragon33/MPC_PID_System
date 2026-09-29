@@ -10,6 +10,7 @@ import {
 import { computeGovernedPidCommand } from './safety/commandSafetyRuntime.js';
 import { evaluateEventTrigger } from './triggers/eventTrigger.js';
 import { defaultConfig, mergeSimulationConfig } from './orchestration/simulationConfig.js';
+import { assertValidSimulationConfig } from './orchestration/simulationConfigValidation.js';
 import { computeSimulationMetrics, safetyViolationAt } from './orchestration/simulationMetrics.js';
 import { createEstimatorRuntime } from './orchestration/estimatorRuntime.js';
 import { createMpcPlanRuntime } from './orchestration/mpcPlanRuntime.js';
@@ -28,7 +29,7 @@ function predictiveReference(solution, target, cfg) {
 }
 
 export function runSimulation(mode, userConfig = {}) {
-  const cfg = mergeSimulationConfig(userConfig);
+  const cfg = assertValidSimulationConfig(mergeSimulationConfig(userConfig));
   const steps = Math.floor(cfg.duration / cfg.dt);
   const pid = createPIDController(cfg.pid, cfg.dt);
   const model = createSecondOrderModel(cfg);
