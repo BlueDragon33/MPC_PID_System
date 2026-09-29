@@ -1,4 +1,5 @@
 import { mergeSimulationConfig } from '../../core/orchestration/simulationConfig.js';
+import { assertValidSimulationConfig } from '../../core/orchestration/simulationConfigValidation.js';
 
 export const WORKBENCH_RECOVERY_SCHEMA = 'mpc-pid-workbench-recovery/v1';
 export const WORKBENCH_RECOVERY_KEY = 'mpc-pid-system:workbench-recovery';
@@ -17,8 +18,8 @@ export function loadWorkbenchRecovery() {
     const payload = JSON.parse(raw);
     if (payload?.schema !== WORKBENCH_RECOVERY_SCHEMA) return null;
     return {
-      draftCfg: mergeSimulationConfig(payload.draftCfg || {}),
-      runCfg: mergeSimulationConfig(payload.runCfg || {}),
+      draftCfg: assertValidSimulationConfig(mergeSimulationConfig(payload.draftCfg || {})),
+      runCfg: assertValidSimulationConfig(mergeSimulationConfig(payload.runCfg || {})),
       presetId: typeof payload.presetId === 'string' ? payload.presetId : 'baseline',
       activeMode: MODES.has(payload.activeMode) ? payload.activeMode : 'HYBRID_SAFE',
       savedAt: payload.savedAt || null,
@@ -39,8 +40,8 @@ export function saveWorkbenchRecovery({ draftCfg, runCfg, presetId, activeMode }
     localStorage.setItem(WORKBENCH_RECOVERY_KEY, JSON.stringify({
       schema: WORKBENCH_RECOVERY_SCHEMA,
       savedAt: new Date().toISOString(),
-      draftCfg: mergeSimulationConfig(draftCfg || {}),
-      runCfg: mergeSimulationConfig(runCfg || {}),
+      draftCfg: assertValidSimulationConfig(mergeSimulationConfig(draftCfg || {})),
+      runCfg: assertValidSimulationConfig(mergeSimulationConfig(runCfg || {})),
       presetId: typeof presetId === 'string' ? presetId : 'baseline',
       activeMode: MODES.has(activeMode) ? activeMode : 'HYBRID_SAFE',
     }));
