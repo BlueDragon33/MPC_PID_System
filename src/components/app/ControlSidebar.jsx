@@ -33,7 +33,7 @@ export default function ControlSidebar({ draftCfg, setDraftCfg, activeMode, setA
       <div className="sidebar-heading"><SlidersHorizontal size={17}/><strong>Control Configuration</strong><ChevronDown size={15}/></div>
       <SelectField label="Control Mode" value={activeMode} onChange={setActiveMode} options={MODES.map((mode) => ({ value: mode, label: MODE_LABELS[mode] }))}/>
       <small className="field-hint">Event-triggered MPC with PID tracking and optional Safety Governor.</small>
-      <div className="config-tabs">{['pid','mpc','trigger','safety'].map((tab) => <button key={tab} className={leftTab === tab ? 'active' : ''} onClick={() => setLeftTab(tab)}>{tab.toUpperCase()}</button>)}</div>
+      <div className="config-tabs">{['pid','mpc','trigger','safety'].map((tab) => <button type="button" key={tab} className={leftTab === tab ? 'active' : ''} onClick={() => setLeftTab(tab)}>{tab.toUpperCase()}</button>)}</div>
 
       {leftTab === 'pid' && <div className="tab-content">
         <NumberField label="Kp" value={draftCfg.pid.kp} step={0.1} onChange={(v) => update('pid','kp',v)}/>
@@ -74,8 +74,8 @@ export default function ControlSidebar({ draftCfg, setDraftCfg, activeMode, setA
       <NumberField label="Sample Time (s)" value={draftCfg.dt} step={0.005} onChange={(v) => update(null,'dt',clamp(v,0.005,0.2))}/>
       <NumberField label="Reference Value" value={draftCfg.setpoint} step={0.1} onChange={(v) => update(null,'setpoint',v)}/>
       <ToggleField label="Disturbance" checked={draftCfg.disturbance.enabled} onChange={(v) => update('disturbance','enabled',v)}/>
-      <button className="run-button" onClick={onRun}><Play size={16} fill="currentColor"/>Run Simulation</button>
-      <button className="reset-button" onClick={onReset}><RotateCcw size={15}/>Reset</button>
+      <button type="button" className="run-button" onClick={onRun}><Play size={16} fill="currentColor"/>Run Simulation</button>
+      <button type="button" className="reset-button" onClick={onReset}><RotateCcw size={15}/>Reset</button>
     </section>
 
     <section className="sidebar-section presets-section"><ExperimentSafetyPanel cfg={draftCfg} setCfg={setDraftCfg} presetId={presetId} setPresetId={setPresetId}/></section>
