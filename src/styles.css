@@ -370,7 +370,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
   .theme-control { min-width: 34px; padding: 6px; }
   .theme-control span { display: none; }
   .status-pill { padding: 6px 8px; font-size: 11px; }
-  .top-nav button { font-size: 10px; flex-direction: column; gap: 3px; padding: 7px 4px; }
+  .top-nav button { font-size: 11px; flex-direction: column; gap: 3px; padding: 7px 4px; }
   .app-brand strong { font-size: 12px; }
   .research-context-header { gap: 7px; }
   .context-primary strong { font-size: 13px; }
