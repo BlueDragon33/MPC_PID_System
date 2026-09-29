@@ -522,6 +522,30 @@
       "productionAuthority": false
     },
     {
+      "id": "QA-E1",
+      "title": "QA-E1 — Current System Baseline Audit",
+      "status": "ACTIVE",
+      "dependsOn": [
+        "UI-E1"
+      ],
+      "track": "MPC_PID_CONTINUOUS_RESEARCH_PRODUCT_QUALITY",
+      "gates": [
+        "configuration-fail-closed",
+        "storage-failure-recovery",
+        "numerical-sanity",
+        "control-safety-regression",
+        "reproducibility",
+        "architecture-boundary",
+        "browser-acceptance",
+        "responsive-accessibility-baseline",
+        "offline-recovery",
+        "scientific-wording",
+        "release-readiness"
+      ],
+      "evidence": [],
+      "productionAuthority": false
+    },
+    {
       "id": "WP07",
       "title": "Release hardening and exact-head evidence",
       "status": "QUEUED",
