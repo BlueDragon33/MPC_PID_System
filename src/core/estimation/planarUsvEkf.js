@@ -1,4 +1,8 @@
 import {
+  assertEstimatorContract,
+  assertFiniteRecord,
+} from '../../contracts/controlContracts.js';
+import {
   createPlanarUsvConfig,
   stepPlanarUsv,
   wrapUsvAngle,
@@ -20,6 +24,14 @@ export function createPlanarUsvEkf({
   processCovariance=[1e-5,1e-5,1e-6,2e-4,2e-4,1e-4],
   measurementVariance=[0.12**2,0.12**2,0.02**2,0.08**2,0.05**2,0.025**2],
 }){
+  assertEstimatorContract({
+    stateLength:6,
+    initialState,
+    initialCovariance,
+    processCovariance,
+    measurementVariance,
+    label:'usvEkf',
+  });
   const p=createPlanarUsvConfig(cfg);
   let x=[...initialState].map(finite);
   x[2]=wrapUsvAngle(x[2]);
@@ -29,6 +41,7 @@ export function createPlanarUsvEkf({
   let diagnostics=null;
 
   function predict(input){
+    assertFiniteRecord(input,['surgeForce','yawMoment'],'usvEkf.input');
     const previous=[...x];
     const state={
       x:previous[0],
@@ -91,6 +104,7 @@ export function createPlanarUsvEkf({
   }
 
   function update(measurement){
+    assertFiniteRecord(measurement,['x','y','psi','u','v','r'],'usvEkf.measurement');
     const entries=[
       measurement.x,
       measurement.y,
@@ -102,7 +116,7 @@ export function createPlanarUsvEkf({
     const innovations=[];
     const innovationVariances=[];
     for(let i=0;i<6;i++){
-      const d=scalarUpdate(i,finite(entries[i]),i===2);
+      const d=scalarUpdate(i,entries[i],i===2);
       innovations.push(d.innovation);
       innovationVariances.push(d.innovationVariance);
     }
