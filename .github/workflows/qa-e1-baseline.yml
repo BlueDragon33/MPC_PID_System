@@ -60,13 +60,12 @@ jobs:
       - name: Researcher browser acceptance
         run: node scripts/qaBrowserBaseline.mjs
       - name: Cross-device dark-light audit
+        if: always()
         run: node scripts/uiVisualAudit.mjs
       - name: Preserve QA evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: qa-e1-baseline
-          path: |
-            artifacts/qa-e1
-            artifacts/ui-audit
+          path: artifacts
           if-no-files-found: error
