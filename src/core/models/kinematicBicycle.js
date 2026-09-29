@@ -1,7 +1,11 @@
+import {
+  assertBicycleConfigContract,
+  assertFiniteRecord,
+} from '../../contracts/controlContracts.js';
 const clamp=(v,lo,hi)=>Math.max(lo,Math.min(hi,v));
 export function wrapAngle(a){let x=a;while(x>Math.PI)x-=2*Math.PI;while(x<-Math.PI)x+=2*Math.PI;return x;}
 export function createBicycleConfig(cfg={}){
-  return {
+  return assertBicycleConfigContract({
     dt:cfg.dt??0.02,
     wheelbase:cfg.wheelbase??2.7,
     maxSteer:cfg.maxSteer??0.55,
@@ -10,9 +14,11 @@ export function createBicycleConfig(cfg={}){
     maxSpeed:cfg.maxSpeed??8,
     minAccel:cfg.minAccel??-3,
     maxAccel:cfg.maxAccel??2.5,
-  };
+  });
 }
 export function stepKinematicBicycle(state,input,cfg={}){
+  assertFiniteRecord(state,['x','y','yaw','v'],'bicycle.state');
+  assertFiniteRecord(input,['steer','accel'],'bicycle.input');
   const p=createBicycleConfig(cfg);
   const steer=clamp(input.steer,-p.maxSteer,p.maxSteer);
   const accel=clamp(input.accel,p.minAccel,p.maxAccel);
@@ -26,6 +32,8 @@ export function stepKinematicBicycle(state,input,cfg={}){
   };
 }
 export function bicycleDerivatives(state,input,cfg={}){
+  assertFiniteRecord(state,['x','y','yaw','v'],'bicycle.state');
+  assertFiniteRecord(input,['steer','accel'],'bicycle.input');
   const p=createBicycleConfig(cfg);
   const steer=clamp(input.steer,-p.maxSteer,p.maxSteer);
   const accel=clamp(input.accel,p.minAccel,p.maxAccel);

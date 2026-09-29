@@ -1,3 +1,7 @@
+import {
+  assertEstimatorContract,
+  assertFiniteRecord,
+} from '../../contracts/controlContracts.js';
 import { createBicycleConfig, wrapAngle } from '../models/kinematicBicycle.js';
 
 const finite=(v,f=0)=>Number.isFinite(v)?v:f;
@@ -16,6 +20,14 @@ export function createUGVBicycleEkf({
   processCovariance = [2e-4,2e-4,2e-5,3e-4],
   measurementVariance = [0.18**2,0.18**2,0.035**2,0.12**2],
 }) {
+  assertEstimatorContract({
+    stateLength:4,
+    initialState,
+    initialCovariance,
+    processCovariance,
+    measurementVariance,
+    label:'ugvEkf',
+  });
   const p=createBicycleConfig(cfg);
   let x=[...initialState].map(finite);
   let P=diag(initialCovariance);
@@ -24,6 +36,7 @@ export function createUGVBicycleEkf({
   let diagnostics=null;
 
   function predict(input){
+    assertFiniteRecord(input,['steer','accel'],'ugvEkf.input');
     const steer=Math.max(-p.maxSteer,Math.min(p.maxSteer,input.steer));
     const accel=Math.max(p.minAccel,Math.min(p.maxAccel,input.accel));
     const [px,py,yaw,v]=x; const dt=p.dt;
@@ -59,10 +72,11 @@ export function createUGVBicycleEkf({
   }
 
   function update(measurement){
+    assertFiniteRecord(measurement,['x','y','yaw','v'],'ugvEkf.measurement');
     const entries=[measurement.x,measurement.y,measurement.yaw,measurement.v];
     const innovations=[]; const innovationVariances=[];
     for(let i=0;i<4;i++){
-      const d=scalarUpdate(i,finite(entries[i]),i===2);
+      const d=scalarUpdate(i,entries[i],i===2);
       innovations.push(d.innovation); innovationVariances.push(d.innovationVariance);
     }
     diagnostics={

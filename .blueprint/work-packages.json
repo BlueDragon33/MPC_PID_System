@@ -563,7 +563,7 @@
     {
       "id": "QA-E2",
       "title": "QA-E2 — Control Contract Regression",
-      "status": "QUEUED",
+      "status": "PASS",
       "dependsOn": [
         "QA-E1"
       ],
@@ -574,6 +574,40 @@
         "invalid-payload-fail-closed",
         "regression-preservation",
         "architecture-boundary"
+      ],
+      "evidence": [
+        "base main aee08ba1474f82f357fb5ad83724941a792a8c73 audited before QA-E2",
+        "QA-004 P1 fixed: UGV/UAV/USV nonlinear plant contracts could accept non-finite state/input or physically invalid configuration values and continue into model math",
+        "QA-005 P1 fixed: nonlinear UGV/UAV/USV EKF boundaries silently coerced invalid measurement/state/covariance values instead of failing closed",
+        "shared src/contracts/controlContracts.js now enforces finite numbers, ordered bounds, positive physical parameters, PID contracts, estimator vector/covariance contracts, solver result semantics and safety result semantics",
+        "UGV/UAV/USV model entry points now reject invalid state/input/config before integration",
+        "PID controller rejects invalid dt/bounds/non-finite target/value before control calculation",
+        "UGV/UAV/USV EKFs reject invalid covariance, state length, measurement and control input instead of silently sanitizing them",
+        "QA-E2 workflow run 36554371017 PASS: plant contracts UGV/UAV/USV; estimator contracts UGV/UAV/USV; solver backends constrained-qp/box-qp/projected-gradient",
+        "Safety Governor authority regression proposed command 99 and accepted 0.25 under +/-0.25 slew envelope; unsafe proposal could not bypass final safety authority",
+        "two invalid experiment/config payloads explicitly rejected at data boundary in QA-E2 regression",
+        "QA-E1 baseline remained PASS with 10 invalid configuration cases, deterministic stochastic trace and independent metric checks",
+        "Release Readiness run 36554371141 PASS on implementation head bcc78705bd8a0cdff463afda2b33593bec32d6b9",
+        "architecture, resilience, presentation/UI visual, control safety, Gate 4B and research Gate 5A-5H regressions all PASS on implementation head",
+        "no unresolved P0/P1"
+      ],
+      "productionAuthority": false
+    },
+    {
+      "id": "QA-E3",
+      "title": "QA-E3 — Numerical Verification Framework",
+      "status": "QUEUED",
+      "dependsOn": [
+        "QA-E2"
+      ],
+      "track": "MPC_PID_CONTINUOUS_RESEARCH_PRODUCT_QUALITY",
+      "gates": [
+        "nan-infinity-fail-closed",
+        "boundary-numerics",
+        "time-step-sensitivity",
+        "covariance-sanity",
+        "metric-independent-check",
+        "regression-preservation"
       ],
       "evidence": [],
       "productionAuthority": false
