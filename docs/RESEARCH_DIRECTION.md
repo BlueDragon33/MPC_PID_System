@@ -661,3 +661,58 @@ Compute timing chỉ là simulation timing trên GitHub CI runner, không phải
 Classification của Gate 5G là **nonlinear classical baseline**. Chưa có estimator, predictive controller, MPC hoặc NMPC authority.
 
 Next scientific package được queue là **RWP05H — USV planar nonlinear state estimation**. Không được nhảy trực tiếp từ Gate 5G sang true NMPC.
+
+
+#### Gate 5H — USV planar nonlinear state estimation — PASS
+
+Đã thêm deterministic noisy sensing và 6-state EKF cho USV planar:
+
+```text
+state = [x, y, psi, u, v, r]
+controller input = estimated state
+ground truth = plant + audit + error statistics only
+```
+
+EKF dùng nonlinear USV prediction, analytic discrete-time Jacobian, sequential Joseph-form covariance update và wrapped heading innovation.
+
+Representative implementation-head evidence:
+
+```text
+measurement RMSE:
+  x:   0.11825 m
+  y:   0.11975 m
+  psi: 0.01996 rad
+  u:   0.07992 m/s
+  v:   0.04866 m/s
+  r:   0.02555 rad/s
+
+EKF RMSE:
+  x:   0.01518 m
+  y:   0.01528 m
+  psi: 0.00346 rad
+  u:   0.02223 m/s
+  v:   0.01770 m/s
+  r:   0.01098 rad/s
+
+truth-state tracking:
+  cross-track RMSE: 0.35737 m
+  heading RMSE:     0.18222 rad
+  speed RMSE:       0.28868 m/s
+
+estimated-state tracking:
+  cross-track RMSE: 0.35650 m
+  heading RMSE:     0.18013 rad
+  speed RMSE:       0.28848 m/s
+
+average covariance trace: 0.002632
+unsafe samples:           0
+max actual violation:     0
+```
+
+Same-seed measurement/estimate/command trace is deterministic; changing the seed changes the noisy closed-loop trace.
+
+Compute timing (~122 us/step on the representative CI run) is simulation timing only and is not hardware real-time evidence.
+
+Classification: **nonlinear state estimation**. Gate 5H does not introduce predictive control, MPC or NMPC authority.
+
+Next scientific package queued: **RWP05I — constrained predictive control comparison on nonlinear planar USV**.
