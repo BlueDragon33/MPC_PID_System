@@ -10,6 +10,7 @@ import {
   saveWorkbenchRecovery,
 } from '../../application/persistence/workbenchRecovery.js';
 import { normalizeWorkbenchRoute, workbenchRouteHash } from './navigation.js';
+import { normalizeControlMode } from './simulationViewModel.js';
 
 const deepClone = (value) => JSON.parse(JSON.stringify(value));
 
@@ -22,10 +23,11 @@ export function useWorkbenchController() {
   const [recovery] = useState(() => loadWorkbenchRecovery());
   const [draftCfg, setDraftCfg] = useState(() => deepClone(recovery?.draftCfg ?? defaultConfig));
   const [runCfg, setRunCfg] = useState(() => deepClone(recovery?.runCfg ?? defaultConfig));
-  const [activeMode, setActiveMode] = useState(recovery?.activeMode ?? 'HYBRID_SAFE');
+  const [activeMode, setActiveMode] = useState(() => normalizeControlMode(recovery?.activeMode));
   const [activeNav, setActiveNav] = useState(initialRoute);
   const [presetId, setPresetId] = useState(recovery?.presetId ?? 'baseline');
   const [batchResult, setBatchResult] = useState(null);
+  const [runRevision, setRunRevision] = useState(1);
 
   const results = useMemo(() => executeControllerComparison(runCfg), [runCfg]);
   const governed = results.find((result) => result.mode === 'HYBRID_SAFE') || results[0];
@@ -63,13 +65,19 @@ export function useWorkbenchController() {
     else setActiveNav(normalizeWorkbenchRoute(nextHash));
   };
 
-  const runSimulation = () => setRunCfg(deepClone(draftCfg));
+  const runSimulation = () => {
+    setRunCfg(deepClone(draftCfg));
+    setRunRevision((revision) => revision + 1);
+  };
 
   const resetSimulation = () => {
     const reset = deepClone(defaultConfig);
     setDraftCfg(reset);
     setRunCfg(reset);
     setPresetId('baseline');
+    setActiveMode('HYBRID_SAFE');
+    setBatchResult(null);
+    setRunRevision((revision) => revision + 1);
   };
 
   return {
@@ -83,6 +91,7 @@ export function useWorkbenchController() {
     resetSimulation,
     results,
     runCfg,
+    runRevision,
     runSimulation,
     setActiveMode,
     setBatchResult,

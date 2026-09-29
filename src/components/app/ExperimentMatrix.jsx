@@ -67,7 +67,7 @@ export default function ExperimentMatrix({
         <div className="matrix-preset-grid">
           {EXPERIMENT_PRESETS.map((preset) => {
             const checked = selected.includes(preset.id);
-            return <button key={preset.id} className={`matrix-preset ${checked ? 'selected' : ''}`} onClick={() => togglePreset(preset.id)}>
+            return <button type="button" key={preset.id} className={`matrix-preset ${checked ? 'selected' : ''}`} onClick={() => togglePreset(preset.id)}>
               <span className="matrix-check">{checked ? <CheckCircle2 size={15}/> : <i/>}</span>
               <span><strong>{preset.label}</strong><small>{preset.description}</small></span>
             </button>;
@@ -78,8 +78,8 @@ export default function ExperimentMatrix({
           <label><span>Noise scale</span><input value={noiseText} onChange={(e) => setNoiseText(e.target.value)} placeholder="0.75, 1, 1.25"/><small>multiplies each preset's measurement σ</small></label>
           <label><span>Mismatch scale</span><input value={mismatchText} onChange={(e) => setMismatchText(e.target.value)} placeholder="0.8, 1, 1.2"/><small>scales existing truth-plant mismatch away from nominal</small></label>
           <div className="matrix-actions">
-            <button className="matrix-run" disabled={!selected.length || caseCount > 48} onClick={runMatrix}><Play size={15}/>Run matrix</button>
-            <button className="matrix-reset" onClick={() => { setSelected(DEFAULT_PRESETS); setSeedText('20260914, 20260915'); setNoiseText('1'); setMismatchText('1'); setError(''); }}><RotateCcw size={14}/>Reset dimensions</button>
+            <button type="button" className="matrix-run" disabled={!selected.length || caseCount > 48} onClick={runMatrix}><Play size={15}/>Run matrix</button>
+            <button type="button" className="matrix-reset" onClick={() => { setSelected(DEFAULT_PRESETS); setSeedText('20260914, 20260915'); setNoiseText('1'); setMismatchText('1'); setError(''); setBatchResult(null); }}><RotateCcw size={14}/>Reset dimensions</button>
           </div>
           {error && <div className="matrix-error">{error}</div>}
         </div>
@@ -89,12 +89,12 @@ export default function ExperimentMatrix({
     <section className="matrix-quick-grid">
       {EXPERIMENT_PRESETS.map((preset) => <article key={preset.id} className={`matrix-quick-card ${preset.id === presetId ? 'active' : ''}`}>
         <div><strong>{preset.label}</strong><small>{preset.patch?.truthPlant?.enabled ? 'model mismatch' : 'nominal plant'} · {preset.patch?.estimation?.enabled ? 'estimator' : 'truth state'}</small></div>
-        <button onClick={() => loadPreset(preset.id)}>{preset.id === presetId ? 'Loaded' : 'Load draft'}</button>
+        <button type="button" disabled={preset.id === presetId} onClick={() => loadPreset(preset.id)}>{preset.id === presetId ? 'Loaded' : 'Load draft'}</button>
       </article>)}
     </section>
 
     {batchResult && <section className="dashboard-card matrix-results">
-      <div className="card-head"><div><BarChart3 size={16}/><strong>Batch result</strong></div><button className="matrix-analysis-button" onClick={() => navigate('analysis')}>Open in Analysis</button></div>
+      <div className="card-head"><div><BarChart3 size={16}/><strong>Batch result</strong></div><button type="button" className="matrix-analysis-button" onClick={() => navigate('analysis')}>Open in Analysis</button></div>
       <div className="matrix-result-kpis">
         <div><span>Cases</span><strong>{batchResult.requestedCases}</strong></div>
         <div><span>Mean IAE</span><strong>{fmt(batchResult.overall.meanIae, 4)}</strong></div>
