@@ -1,3 +1,7 @@
+import {
+  assertFiniteRecord,
+  assertPlanarUsvConfigContract,
+} from '../../contracts/controlContracts.js';
 const clamp=(v,lo,hi)=>Math.max(lo,Math.min(hi,v));
 
 export function wrapUsvAngle(angle){
@@ -8,7 +12,7 @@ export function wrapUsvAngle(angle){
 }
 
 export function createPlanarUsvConfig(cfg={}){
-  return {
+  return assertPlanarUsvConfigContract({
     dt:cfg.dt??0.02,
     mass:cfg.mass??18,
     yawInertia:cfg.yawInertia??8,
@@ -21,10 +25,12 @@ export function createPlanarUsvConfig(cfg={}){
     minSurgeForce:cfg.minSurgeForce??-30,
     maxSurgeForce:cfg.maxSurgeForce??45,
     maxYawMoment:cfg.maxYawMoment??18,
-  };
+  });
 }
 
 export function planarUsvDerivatives(state,input,cfg={}){
+  assertFiniteRecord(state,['x','y','psi','u','v','r'],'usv.state');
+  assertFiniteRecord(input,['surgeForce','yawMoment'],'usv.input');
   const p=createPlanarUsvConfig(cfg);
   const surgeForce=clamp(input.surgeForce,p.minSurgeForce,p.maxSurgeForce);
   const yawMoment=clamp(input.yawMoment,-p.maxYawMoment,p.maxYawMoment);
