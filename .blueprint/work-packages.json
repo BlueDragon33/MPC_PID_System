@@ -423,6 +423,24 @@
       "productionAuthority": false
     },
     {
+      "id": "E1",
+      "title": "Architecture E1 — Current extensibility audit",
+      "status": "ACTIVE",
+      "dependsOn": [
+        "WP06R"
+      ],
+      "track": "MPC_PID_EXTENSIBLE_CONTROL_PLATFORM_ARCHITECTURE",
+      "gates": [
+        "current-main-audit",
+        "extensibility-baseline",
+        "architecture-boundary",
+        "regression-preservation",
+        "build"
+      ],
+      "evidence": [],
+      "productionAuthority": false
+    },
+    {
       "id": "WP07",
       "title": "Release hardening and exact-head evidence",
       "status": "QUEUED",
