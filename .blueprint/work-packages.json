@@ -524,7 +524,7 @@
     {
       "id": "QA-E1",
       "title": "QA-E1 — Current System Baseline Audit",
-      "status": "ACTIVE",
+      "status": "PASS",
       "dependsOn": [
         "UI-E1"
       ],
@@ -541,6 +541,39 @@
         "offline-recovery",
         "scientific-wording",
         "release-readiness"
+      ],
+      "evidence": [
+        "base main fbad404b3b8fbf1efc9fb9b5b615c713ef3a42f9 audited before QA changes",
+        "QA-001 P1 fixed: imported/recovered invalid simulation config could reach runtime; dt=0 could create an unbounded simulation loop",
+        "fail-closed simulation configuration contract now validates finite timing, execution step budget, solver identity, bounds, estimator covariance/noise, trigger ordering and key numeric relationships before runtime/import/export/recovery",
+        "QA-002 P2 fixed: local experiment storage write failure now returns false instead of throwing; browser acceptance verifies user-visible recovery",
+        "QA-003 P2 fixed: workbench now has one semantic h1 and primary control SVGs include title/desc text semantics",
+        "QA-E1 baseline smoke on run 36550437779 PASS: 10 invalid-config cases rejected; same-seed stochastic trace reproducible; different seed changes measurement trace",
+        "independent QA metrics on short PID run matched product metrics: IAE 0.38076639061888246; control effort 1.6504035765023823; max actual safety violation 0",
+        "researcher browser acceptance PASS: invalid import rejected, valid import accepted, storage failure recovered, no console errors, no page errors",
+        "cross-device dark/light visual audit PASS at 1920/1440/1280/1024/768/430/390 with defects=[]; h1Count=1; no horizontal overflow; no tiny text; actual safety visible",
+        "QA evidence artifact 11024960306 digest sha256:c6ee18a4f43096860d387bada91f1399f64edc545f96b5215c9db94839fe1bc4",
+        "implementation-head Release Readiness run 36550437846 PASS with offline/online candidate smoke",
+        "architecture, resilience, control safety, UI presentation and research Gate 4B/5A-5H regressions all PASS on implementation head 5ff29be0252d4909cc8546f5198aae605de3cb44",
+        "no unresolved P0/P1",
+        "known P2 deferred: mobile dashboard remains vertically long; no overflow/unreachable control observed; structural mobile reduction belongs to queued UI responsive/mobile epochs rather than QA-E1 patchwork"
+      ],
+      "productionAuthority": false
+    },
+    {
+      "id": "QA-E2",
+      "title": "QA-E2 — Control Contract Regression",
+      "status": "QUEUED",
+      "dependsOn": [
+        "QA-E1"
+      ],
+      "track": "MPC_PID_CONTINUOUS_RESEARCH_PRODUCT_QUALITY",
+      "gates": [
+        "plant-controller-estimator-contracts",
+        "solver-safety-contracts",
+        "invalid-payload-fail-closed",
+        "regression-preservation",
+        "architecture-boundary"
       ],
       "evidence": [],
       "productionAuthority": false
