@@ -376,7 +376,7 @@
     {
       "id": "RWP05H",
       "title": "Gate 5H — USV planar nonlinear state estimation",
-      "status": "ACTIVE",
+      "status": "PASS",
       "dependsOn": [
         "RWP05G"
       ],
@@ -386,6 +386,38 @@
         "deterministic-noise",
         "closed-loop-estimation",
         "safety-audit"
+      ],
+      "evidence": [
+        "deterministic seeded noisy measurements for USV state [x,y,psi,u,v,r]",
+        "6-state EKF uses nonlinear planar-USV prediction with analytic discrete-time Jacobian",
+        "sequential Joseph-form covariance update with wrapped heading innovation",
+        "controller consumes estimated state only; truth remains plant/audit/error-statistics data",
+        "same seed reproduces measurement/estimate/command trace exactly; different seed changes noisy closed-loop trace",
+        "measurement RMSE x/y/psi/u/v/r = 0.11825/0.11975/0.01996/0.07992/0.04866/0.02555",
+        "EKF RMSE x/y/psi/u/v/r = 0.01518/0.01528/0.00346/0.02223/0.01770/0.01098",
+        "truth-state tracking RMSE cross-track/heading/speed = 0.35737/0.18222/0.28868",
+        "estimated-state tracking RMSE cross-track/heading/speed = 0.35650/0.18013/0.28848",
+        "average covariance trace 0.002632; unsafe samples 0; max actual violation 0",
+        "compute per step 122.00 us on CI runner; simulation timing only, not hardware real-time evidence",
+        "Gate 5H workflow run 36540116206 + inherited research/safety/architecture gates + Release Readiness run 36540116403 PASS on implementation head 433ab428f5ee41c24d9c7a208fbf0a58f93834a0",
+        "classification: nonlinear state estimation only; no predictive/MPC/NMPC authority"
+      ],
+      "productionAuthority": false
+    },
+    {
+      "id": "RWP05I",
+      "title": "Gate 5I — constrained predictive control comparison on nonlinear planar USV",
+      "status": "QUEUED",
+      "dependsOn": [
+        "RWP05H"
+      ],
+      "gates": [
+        "nonlinear-usv-prediction-contract",
+        "classical-baseline-comparison",
+        "constraint-feasibility",
+        "safety-audit",
+        "compute-quality-comparison",
+        "deterministic-regression"
       ],
       "evidence": [],
       "productionAuthority": false
