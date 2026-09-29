@@ -31,9 +31,11 @@ assert.match(appSource, /type="button"/, 'navigation buttons must declare button
 assert.match(appSource, /research-context-header/, 'research context header must be present');
 assert.match(appSource, /data-theme-control/, 'theme control must be present');
 assert.match(appSource, /Actual safety/, 'actual plant safety context must be explicit');
+assert.match(appSource, /<h1>Linear control benchmark<\/h1>/, 'workbench requires a semantic primary heading');
 
 const dashboardSource = fs.readFileSync(path.join(process.cwd(), 'src', 'components', 'app', 'SimulationDashboard.jsx'), 'utf8');
 assert.doesNotMatch(dashboardSource, />Optimal</, 'solver UI must not hard-code an Optimal claim');
+assert.match(dashboardSource, /<desc>/, 'primary control charts require textual descriptions');
 
 function walk(dir) {
   if (!fs.existsSync(dir)) return [];

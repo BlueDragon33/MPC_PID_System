@@ -269,7 +269,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
   background: color-mix(in srgb, var(--panel) 94%, transparent);
 }
 .context-primary { min-width: 0; display: grid; gap: 3px; }
-.context-primary strong { color: var(--text); font-size: 14px; letter-spacing: -.01em; }
+.context-primary h1 { margin: 0; color: var(--text); font-size: 14px; line-height: 1.25; letter-spacing: -.01em; }
 .context-primary>span:last-child { color: var(--muted); font-size: 11px; }
 .context-eyebrow {
   color: var(--blue);
@@ -389,7 +389,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
   .top-nav button { font-size: 11px; flex-direction: column; gap: 3px; padding: 7px 4px; }
   .app-brand strong { font-size: 12px; }
   .research-context-header { gap: 7px; }
-  .context-primary strong { font-size: 13px; }
+  .context-primary h1 { font-size: 13px; }
   .context-grid { gap: 4px 8px; }
   .context-grid dd { font-size: 11px; }
 }
