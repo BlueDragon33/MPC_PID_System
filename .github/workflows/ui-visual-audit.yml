@@ -1,0 +1,60 @@
+name: MPC PID UI Visual Audit
+
+on:
+  pull_request:
+    paths:
+      - ".blueprint/**"
+      - "src/App.jsx"
+      - "src/components/**"
+      - "src/styles.css"
+      - "src/solverDiagnostics.css"
+      - "scripts/uiVisualAudit.mjs"
+      - "scripts/presentationContractSmoke.mjs"
+      - "docs/UI_UX_AUDIT.md"
+      - ".github/workflows/ui-visual-audit.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  visual-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install application dependencies
+        run: npm install --no-audit --no-fund
+      - name: Install browser audit dependency
+        run: |
+          npm install --no-save --no-package-lock playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Build
+        run: npm run build
+      - name: Start preview
+        shell: bash
+        run: |
+          npm run preview -- --host 127.0.0.1 --port 4173 >/tmp/mpc-ui-preview.log 2>&1 &
+          echo $! > /tmp/mpc-ui-preview.pid
+          for attempt in {1..30}; do
+            if curl -fsS http://127.0.0.1:4173/ >/dev/null; then
+              exit 0
+            fi
+            sleep 0.5
+          done
+          cat /tmp/mpc-ui-preview.log
+          exit 1
+      - name: Cross-device screenshots and UX audit
+        run: node scripts/uiVisualAudit.mjs
+      - name: Presentation contract
+        run: node scripts/presentationContractSmoke.mjs
+      - name: Upload UI audit evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-e1-visual-audit
+          path: artifacts/ui-audit
+          if-no-files-found: error
