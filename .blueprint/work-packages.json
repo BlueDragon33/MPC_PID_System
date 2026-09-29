@@ -376,7 +376,7 @@
     {
       "id": "RWP05H",
       "title": "Gate 5H — USV planar nonlinear state estimation",
-      "status": "QUEUED",
+      "status": "ACTIVE",
       "dependsOn": [
         "RWP05G"
       ],
