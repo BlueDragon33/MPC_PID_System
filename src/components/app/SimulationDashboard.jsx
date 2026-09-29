@@ -20,6 +20,8 @@ function TimeSeriesChart({ results, valueKey, target, yLabel, compact=false }) {
   const path=(samples)=>samples.map((s,i)=>`${i?'L':'M'} ${x(s.t).toFixed(2)} ${y(Number(s[valueKey])||0).toFixed(2)}`).join(' ');
   const xTicks=Array.from({length:6},(_,i)=>(tMax*i)/5), yTicks=Array.from({length:5},(_,i)=>yMin+((yMax-yMin)*i)/4);
   return <svg className={`timeseries-chart ${compact?'compact':''}`} viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${yLabel} chart`}>
+    <title>{`${yLabel} controller comparison`}</title>
+    <desc>{`${yLabel} over time for ${results.length} controller modes${valueKey==='x' ? `, with reference ${target}` : ''}.`}</desc>
     <g className="chart-grid">{xTicks.map((tick)=><line key={`x-${tick}`} x1={x(tick)} y1={pad.t} x2={x(tick)} y2={height-pad.b}/>)}{yTicks.map((tick)=><line key={`y-${tick}`} x1={pad.l} y1={y(tick)} x2={width-pad.r} y2={y(tick)}/>)}</g>
     {valueKey==='x'&&<line x1={pad.l} y1={y(target)} x2={width-pad.r} y2={y(target)} className="target-line"/>}
     {results.map((result)=><path key={result.mode} d={path(result.samples)} className={`curve curve-${result.mode.toLowerCase()}`}/>)}
@@ -33,6 +35,8 @@ function TriggerTimeline({samples,duration}){
   const x=(t)=>pad.l+(t/Math.max(duration,1e-6))*(width-pad.l-pad.r), rowY=(i)=>30+i*24;
   const events=samples.filter((s)=>s.triggered||s.governorSafetyIntervened);
   return <svg className="trigger-timeline" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Trigger events timeline">
+    <title>Trigger and safety event timeline</title>
+    <desc>{`${events.length} trigger or safety events across prediction, state, timeout and safety rows.`}</desc>
     {rows.map(([reason,label],i)=><g key={reason}><text x="8" y={rowY(i)+4} className="timeline-row-label">{label}</text><line x1={pad.l} y1={rowY(i)} x2={width-pad.r} y2={rowY(i)} className="timeline-row"/></g>)}
     {events.map((s,i)=>{const reason=s.governorSafetyIntervened?'constraint':s.triggerReason==='initial'?'prediction-error':s.triggerReason; const ri=Math.max(0,rows.findIndex(([key])=>key===reason)); return <line key={`${s.t}-${i}`} x1={x(s.t)} y1={rowY(ri)-7} x2={x(s.t)} y2={rowY(ri)+7} className={`event-mark event-${reason}`}/>;})}
     {Array.from({length:6},(_,i)=>(duration*i)/5).map((tick)=><g key={tick}><text x={x(tick)} y={height-8} textAnchor="middle" className="timeline-tick">{tick.toFixed(duration>20?0:1)}</text><line x1={x(tick)} y1="18" x2={x(tick)} y2={height-25} className="timeline-gridline"/></g>)}
