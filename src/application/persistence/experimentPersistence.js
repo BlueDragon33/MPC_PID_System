@@ -7,13 +7,22 @@ export const LOCAL_EXPERIMENT_KEY = 'mpc-pid-system:last-experiment';
 
 export function saveExperimentLocal(config, metadata = {}) {
   if (typeof localStorage === 'undefined') return false;
-  localStorage.setItem(LOCAL_EXPERIMENT_KEY, serializeExperiment(config, metadata));
-  return true;
+  try {
+    localStorage.setItem(LOCAL_EXPERIMENT_KEY, serializeExperiment(config, metadata));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function loadExperimentLocal() {
   if (typeof localStorage === 'undefined') return null;
-  const raw = localStorage.getItem(LOCAL_EXPERIMENT_KEY);
+  let raw;
+  try {
+    raw = localStorage.getItem(LOCAL_EXPERIMENT_KEY);
+  } catch {
+    throw new Error('Local experiment storage is unavailable.');
+  }
   return raw ? parseExperimentPayload(raw) : null;
 }
 
