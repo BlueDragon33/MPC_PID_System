@@ -1,15 +1,17 @@
 import { mergeSimulationConfig } from '../orchestration/simulationConfig.js';
+import { assertValidSimulationConfig } from '../orchestration/simulationConfigValidation.js';
 
 export const EXPERIMENT_SCHEMA = 'mpc-pid-experiment/v1';
 
 export function createExperimentPayload(config, metadata = {}) {
+  const validatedConfig = assertValidSimulationConfig(mergeSimulationConfig(config));
   return {
     schema: EXPERIMENT_SCHEMA,
     createdAt: new Date().toISOString(),
     name: metadata.name || 'MPC PID experiment',
     presetId: metadata.presetId || 'custom',
     notes: metadata.notes || '',
-    config: mergeSimulationConfig(config),
+    config: validatedConfig,
   };
 }
 
@@ -21,7 +23,7 @@ export function parseExperimentPayload(input) {
   if (!payload.config.mpc || typeof payload.config.mpc !== 'object') throw new Error('Experiment config is missing MPC settings.');
   return {
     ...payload,
-    config: mergeSimulationConfig(payload.config),
+    config: assertValidSimulationConfig(mergeSimulationConfig(payload.config)),
   };
 }
 
