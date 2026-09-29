@@ -614,6 +614,7 @@
         "Simulation response signal selector is a functional Position/Velocity select control",
         "Control Configuration disclosure, tabs, run feedback, current-selection disabled states and explicit button types are enforced by repeatable UI interaction regression",
         "Reset restores default configuration, baseline preset, HYBRID_SAFE mode and clears stale matrix results",
+        "experiment matrix computation runs in a dedicated module Web Worker so long batches do not block navigation or control feedback",
         "UI interaction regression, presentation contract, architecture check, control QA, full smoke, full benchmark and production build pass on the implementation branch",
         "browser acceptance verifies mode/chart switching, navigation, tabs, reset, theme, persistence, scenario and matrix controls after Pages deployment"
       ],

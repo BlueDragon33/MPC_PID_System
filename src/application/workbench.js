@@ -12,6 +12,7 @@ export {
   createExperimentPayload,
   downloadExperimentJSON,
   executeExperimentMatrix,
+  executeExperimentMatrixInWorker,
   EXPERIMENT_PRESETS,
   EXPERIMENT_SCHEMA,
   getExperimentPreset,

@@ -13,6 +13,7 @@ This regression covers the research workbench controls reported as visually inte
 | Configuration heading | The heading displayed a disclosure chevron without a control action. | It is now an accessible disclosure button with `aria-expanded`. |
 | Run and reset | Run had no visible acknowledgement. Reset left the selected mode and matrix output stale. | Run exposes an `aria-live` revision acknowledgement. Reset restores default config, baseline preset, `HYBRID_SAFE`, and clears matrix output. |
 | Current selections | Loaded scenario/preset and selected best/worst actions remained clickable, while button typing varied. | Current actions expose disabled state and all JSX buttons declare `type="button"`. |
+| Batch matrix | Matrix simulation ran synchronously on the browser main thread, making the page appear frozen during long batches. | Matrix computation now runs in a dedicated module Web Worker with an explicit busy state; control math and result contracts are unchanged. |
 
 ## Repeatable gate
 
@@ -20,7 +21,7 @@ This regression covers the research workbench controls reported as visually inte
 npm run qa:ui-interactions
 ```
 
-The gate verifies selected-mode ownership, invalid-mode fallback, response-signal normalization, semantic button types, working disclosure/run feedback, reset semantics, matrix stale-state clearing, and this evidence/work-package record.
+The gate verifies selected-mode ownership, invalid-mode fallback, response-signal normalization, semantic button types, working disclosure/run feedback, reset semantics, matrix stale-state clearing, background-worker lifecycle, and this evidence/work-package record.
 
 ## Verification matrix
 

@@ -55,13 +55,15 @@ assert.match(controllerSource, /setActiveMode\('HYBRID_SAFE'\)/, 'Reset must res
 const matrixSource = fs.readFileSync(path.join(process.cwd(), 'src/components/app/ExperimentMatrix.jsx'), 'utf8');
 assert.match(matrixSource, /setBatchResult\(null\)/, 'Reset dimensions must clear stale batch results');
 assert.match(matrixSource, /disabled=\{preset\.id === presetId\}/, 'already loaded presets must expose a disabled state');
+assert.match(matrixSource, /executeExperimentMatrixInWorker/, 'long matrix runs must execute off the main UI thread');
+assert.match(matrixSource, /aria-busy=\{isRunning\}/, 'matrix execution must expose visible busy state');
 
 const stylesSource = fs.readFileSync(path.join(process.cwd(), 'src/styles.css'), 'utf8');
 assert.match(stylesSource, /:root\[data-theme="light"\] \.chart-selector select/, 'response selector must remain readable in light theme');
 assert.match(stylesSource, /:root\[data-theme="light"\] \.sidebar-disclosure:hover/, 'configuration disclosure hover must remain readable in light theme');
 
 const packageJson = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf8'));
-assert.equal(packageJson.scripts?.['qa:ui-interactions'], 'node scripts/uiInteractionRegression.mjs', 'UI interaction QA must be repeatable from npm');
+assert.equal(packageJson.scripts?.['qa:ui-interactions'], 'node scripts/uiInteractionRegression.mjs && node scripts/experimentMatrixWorkerContract.mjs', 'UI interaction QA must include the background matrix contract');
 
 const qaEvidencePath = path.join(process.cwd(), 'docs/QA_UI_INTERACTIONS.md');
 assert.equal(fs.existsSync(qaEvidencePath), true, 'UI interaction QA evidence must be documented');
