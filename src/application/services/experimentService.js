@@ -40,15 +40,24 @@ export function executeExperimentMatrix(options) {
   return assertExperimentMatrixContract(runExperimentMatrix(options));
 }
 
-export function executeExperimentMatrixInWorker(options, WorkerClass = globalThis.Worker) {
-  if (typeof WorkerClass !== 'function') {
-    return Promise.reject(new Error('Background experiment execution is unavailable in this browser.'));
-  }
-
-  const worker = new WorkerClass(
+export function createExperimentMatrixWorker() {
+  return new Worker(
     new URL('../workers/experimentMatrixWorker.js', import.meta.url),
     { type: 'module', name: 'mpc-pid-experiment-matrix' },
   );
+}
+
+export function executeExperimentMatrixInWorker(options, createWorker = createExperimentMatrixWorker) {
+  if (typeof createWorker !== 'function') {
+    return Promise.reject(new Error('Background experiment execution is unavailable in this browser.'));
+  }
+
+  let worker;
+  try {
+    worker = createWorker();
+  } catch (error) {
+    return Promise.reject(error);
+  }
 
   return new Promise((resolve, reject) => {
     let settled = false;

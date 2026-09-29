@@ -33,7 +33,7 @@ class SuccessfulWorker {
 }
 
 const options = { presetIds: ['baseline'], seeds: [1, 2] };
-const result = await executeExperimentMatrixInWorker(options, SuccessfulWorker);
+const result = await executeExperimentMatrixInWorker(options, () => new SuccessfulWorker('test-worker', { type: 'module' }));
 const worker = SuccessfulWorker.instances[0];
 assert.equal(worker.options.type, 'module');
 assert.equal(worker.message.type, 'run');
@@ -50,7 +50,7 @@ class FailedWorker extends SuccessfulWorker {
 }
 
 await assert.rejects(
-  executeExperimentMatrixInWorker(options, FailedWorker),
+  executeExperimentMatrixInWorker(options, () => new FailedWorker('test-worker', { type: 'module' })),
   /matrix failed safely/,
 );
 assert.equal(SuccessfulWorker.instances.at(-1).terminated, true, 'worker must terminate after a failed batch');
@@ -62,7 +62,7 @@ class PostMessageFailedWorker extends SuccessfulWorker {
 }
 
 await assert.rejects(
-  executeExperimentMatrixInWorker(options, PostMessageFailedWorker),
+  executeExperimentMatrixInWorker(options, () => new PostMessageFailedWorker('test-worker', { type: 'module' })),
   /message could not be sent/,
 );
 assert.equal(SuccessfulWorker.instances.at(-1).terminated, true, 'worker must terminate when dispatch fails');
