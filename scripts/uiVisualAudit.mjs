@@ -28,7 +28,7 @@ for(const viewport of viewports){
   const page=await browser.newPage({viewport:{width:viewport.width,height:viewport.height}});
   await page.goto(baseUrl,{waitUntil:'networkidle'});
   await page.screenshot({
-    path:path.join(outDir,`${viewport.name}.png`),
+    path:path.join(outDir,`${viewport.name}-dark.png`),
     fullPage:true,
   });
 
@@ -66,18 +66,40 @@ for(const viewport of viewports){
       tinyText:tiny,
       hasResearchContextHeader:Boolean(document.querySelector('.research-context-header')),
       hasThemeControl:Boolean(document.querySelector('[data-theme-control],.theme-control')),
+      safetyContextVisible:Boolean(document.querySelector('.context-safety')&&visible(document.querySelector('.context-safety'))),
+      theme:document.documentElement.dataset.theme||'unset',
       h1Count:document.querySelectorAll('h1').length,
       navButtonCount:document.querySelectorAll('.top-nav button').length,
       focusableCount:document.querySelectorAll('button,a[href],input,select,textarea,[tabindex]:not([tabindex="-1"])').length,
     };
   });
 
-  if(snapshot.horizontalOverflow) report.defects.push({viewport:viewport.name,id:'horizontal-overflow'});
+  if(snapshot.horizontalOverflow) report.defects.push({viewport:viewport.name,id:'horizontal-overflow-dark'});
   if(!snapshot.statusVisible&&viewport.width<=430) report.defects.push({viewport:viewport.name,id:'mobile-status-hidden'});
   if(snapshot.tinyTextCount>0) report.defects.push({viewport:viewport.name,id:'tiny-text',count:snapshot.tinyTextCount});
   if(!snapshot.hasResearchContextHeader) report.defects.push({viewport:viewport.name,id:'missing-research-context-header'});
   if(!snapshot.hasThemeControl) report.defects.push({viewport:viewport.name,id:'missing-theme-control'});
-  report.viewports.push({...viewport,...snapshot});
+  if(!snapshot.safetyContextVisible) report.defects.push({viewport:viewport.name,id:'missing-safety-context'});
+
+  let light=null;
+  if(snapshot.hasThemeControl){
+    await page.locator('[data-theme-control]').click();
+    await page.waitForTimeout(120);
+    light=await page.evaluate(()=>({
+      theme:document.documentElement.dataset.theme||'unset',
+      scrollWidth:document.documentElement.scrollWidth,
+      viewportWidth:window.innerWidth,
+      horizontalOverflow:document.documentElement.scrollWidth>window.innerWidth+1,
+    }));
+    await page.screenshot({
+      path:path.join(outDir,`${viewport.name}-light.png`),
+      fullPage:true,
+    });
+    if(light.theme!=='light') report.defects.push({viewport:viewport.name,id:'light-theme-not-applied'});
+    if(light.horizontalOverflow) report.defects.push({viewport:viewport.name,id:'horizontal-overflow-light'});
+  }
+
+  report.viewports.push({...viewport,...snapshot,light});
   await page.close();
 }
 
@@ -102,3 +124,8 @@ await browser.close();
 fs.writeFileSync(path.join(outDir,'report.json'),JSON.stringify(report,null,2)+'\n');
 console.log('UI visual audit complete');
 console.log(JSON.stringify(report,null,2));
+if(report.defects.length){
+  console.error(`UI visual audit FAIL: ${report.defects.length} defect(s)`);
+  process.exit(1);
+}
+console.log('UI visual audit PASS');
