@@ -563,7 +563,7 @@
     {
       "id": "QA-E2",
       "title": "QA-E2 — Control Contract Regression",
-      "status": "QUEUED",
+      "status": "ACTIVE",
       "dependsOn": [
         "QA-E1"
       ],
