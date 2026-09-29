@@ -1,3 +1,7 @@
+import {
+  assertEstimatorContract,
+  assertFiniteRecord,
+} from '../../contracts/controlContracts.js';
 import { createPlanarUavConfig, stepPlanarUav, wrapPlanarAngle } from '../models/planarUav.js';
 
 const finite=(v,f=0)=>Number.isFinite(v)?v:f;
@@ -16,6 +20,14 @@ export function createPlanarUavEkf({
   processCovariance=[1e-5,1e-5,1e-6,3e-4,3e-4,4e-4],
   measurementVariance=[0.08**2,0.06**2,0.015**2,0.08**2,0.07**2,0.04**2],
 }){
+  assertEstimatorContract({
+    stateLength:6,
+    initialState,
+    initialCovariance,
+    processCovariance,
+    measurementVariance,
+    label:'uavEkf',
+  });
   const p=createPlanarUavConfig(cfg);
   let x=[...initialState].map(finite);
   x[2]=wrapPlanarAngle(x[2]);
@@ -25,6 +37,7 @@ export function createPlanarUavEkf({
   let diagnostics=null;
 
   function predict(input){
+    assertFiniteRecord(input,['thrust','torque'],'uavEkf.input');
     const previous=[...x];
     const state={x:previous[0],z:previous[1],theta:previous[2],vx:previous[3],vz:previous[4],q:previous[5]};
     const next=stepPlanarUav(state,input,p);
@@ -58,10 +71,11 @@ export function createPlanarUavEkf({
   }
 
   function update(measurement){
+    assertFiniteRecord(measurement,['x','z','theta','vx','vz','q'],'uavEkf.measurement');
     const entries=[measurement.x,measurement.z,measurement.theta,measurement.vx,measurement.vz,measurement.q];
     const innovations=[]; const innovationVariances=[];
     for(let i=0;i<6;i++){
-      const d=scalarUpdate(i,finite(entries[i]),i===2);
+      const d=scalarUpdate(i,entries[i],i===2);
       innovations.push(d.innovation); innovationVariances.push(d.innovationVariance);
     }
     diagnostics={innovations,innovationVariances,covarianceTrace:P.reduce((s,row,i)=>s+row[i],0)};
