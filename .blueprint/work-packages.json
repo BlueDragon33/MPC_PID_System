@@ -423,6 +423,53 @@
       "productionAuthority": false
     },
     {
+      "id": "E1",
+      "title": "Architecture E1 — Current extensibility audit",
+      "status": "PASS",
+      "dependsOn": [
+        "WP06R"
+      ],
+      "track": "MPC_PID_EXTENSIBLE_CONTROL_PLATFORM_ARCHITECTURE",
+      "gates": [
+        "current-main-audit",
+        "extensibility-baseline",
+        "architecture-boundary",
+        "regression-preservation",
+        "build"
+      ],
+      "evidence": [
+        "repeatable mpc-pid-extensibility-audit/v1 added and enforced by Architecture Migration Gate",
+        "current architecture preserves 0 Presentation -> Core direct imports",
+        "three validated vehicle-specific orchestration modules remain explicit: UGV, UAV and USV",
+        "audit measured 19 orchestration direct imports to concrete model/controller/estimator/solver implementations",
+        "audit measured 9 Application-layer direct Core imports under the current layered architecture",
+        "registry foundation files under src: 0; provider-named files under src: 0; code manifest files under src: 0",
+        "current evidence therefore supports descriptor-first then registry migration; it does not justify a full plugin framework rewrite",
+        "Architecture Migration Gate run 36543141580 PASS on implementation head d23adbf57c6924a665400253795989bf3608feb8",
+        "Release Readiness run 36543141671 plus inherited research/safety/resilience/build gates PASS on the same implementation head",
+        "research behavior unchanged; UGV/UAV/USV regressions remain green"
+      ],
+      "productionAuthority": false
+    },
+    {
+      "id": "E2",
+      "title": "Architecture E2 — Capability Descriptor Foundation",
+      "status": "QUEUED",
+      "dependsOn": [
+        "E1"
+      ],
+      "track": "MPC_PID_EXTENSIBLE_CONTROL_PLATFORM_ARCHITECTURE",
+      "gates": [
+        "capability-descriptor-contract",
+        "real-implementation-adoption",
+        "backward-compatibility",
+        "architecture-boundary",
+        "regression-preservation"
+      ],
+      "evidence": [],
+      "productionAuthority": false
+    },
+    {
       "id": "WP07",
       "title": "Release hardening and exact-head evidence",
       "status": "QUEUED",
