@@ -1,0 +1,72 @@
+name: MPC PID QA-E1 Baseline
+
+on:
+  pull_request:
+    paths:
+      - ".blueprint/**"
+      - "src/**"
+      - "public/**"
+      - "scripts/**"
+      - "docs/QA_BASELINE.md"
+      - ".github/workflows/qa-e1-baseline.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  qa-baseline:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 22
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install application dependencies
+        run: npm install --no-audit --no-fund
+      - name: Install browser QA dependency
+        run: |
+          npm install --no-save --no-package-lock playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Configuration, numerical, reproducibility and recovery QA
+        run: node scripts/qaBaselineSmoke.mjs
+      - name: Architecture contract
+        run: node scripts/architectureCheck.mjs
+      - name: Orchestration contract
+        run: node scripts/orchestrationContractSmoke.mjs
+      - name: Presentation and accessibility contract
+        run: node scripts/presentationContractSmoke.mjs
+      - name: Offline and recovery contract
+        run: node scripts/resilienceSmoke.mjs
+      - name: Control and research regression
+        run: npm run smoke
+      - name: Build preview candidate
+        run: npm run build
+      - name: Start preview
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run preview -- --host 127.0.0.1 --port 4173 >/tmp/mpc-qa-preview.log 2>&1 &
+          echo $! > /tmp/mpc-qa-preview.pid
+          for attempt in {1..30}; do
+            if curl -fsS http://127.0.0.1:4173/ >/dev/null; then
+              exit 0
+            fi
+            sleep 0.5
+          done
+          cat /tmp/mpc-qa-preview.log
+          exit 1
+      - name: Researcher browser acceptance
+        run: node scripts/qaBrowserBaseline.mjs
+      - name: Cross-device dark-light audit
+        run: node scripts/uiVisualAudit.mjs
+      - name: Preserve QA evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-e1-baseline
+          path: |
+            artifacts/qa-e1
+            artifacts/ui-audit
+          if-no-files-found: error
