@@ -82,8 +82,8 @@ export default function CaseExplorer({ batchResult, presetId, selectedCaseId, on
     <div className="case-explorer-head">
       <div><span>CASE EXPLORER</span><h2>{selected.presetLabel}</h2><p>Inspect a stored batch trajectory without re-running the simulation.</p></div>
       <div className="case-head-actions">
-        <button className={selected.id === best?.id ? 'active' : ''} onClick={() => onSelectCase(best.id)}><CheckCircle2 size={14}/>Best case</button>
-        <button className={selected.id === worst?.id ? 'active danger' : ''} onClick={() => onSelectCase(worst.id)}><AlertTriangle size={14}/>Worst case</button>
+        <button type="button" disabled={selected.id === best?.id} className={selected.id === best?.id ? 'active' : ''} onClick={() => onSelectCase(best.id)}><CheckCircle2 size={14}/>Best case</button>
+        <button type="button" disabled={selected.id === worst?.id} className={selected.id === worst?.id ? 'active danger' : ''} onClick={() => onSelectCase(worst.id)}><AlertTriangle size={14}/>Worst case</button>
       </div>
     </div>
 

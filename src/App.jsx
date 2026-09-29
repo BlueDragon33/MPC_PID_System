@@ -44,6 +44,7 @@ export default function App(){
     resetSimulation,
     results,
     runCfg,
+    runRevision,
     runSimulation,
     setActiveMode,
     setBatchResult,
@@ -68,8 +69,9 @@ export default function App(){
     try { window.localStorage.setItem('mpc-pid-theme',theme); } catch {}
   },[theme]);
 
-  const status=statusSummary(governed);
-  const safetyViolations=governed?.metrics?.safetyViolationCount??0;
+  const activeResult=results.find((result)=>result.mode===activeMode)||governed;
+  const status=statusSummary(activeResult);
+  const safetyViolations=activeResult?.metrics?.safetyViolationCount??0;
   const estimatorLabel=runCfg.estimation?.enabled?'Kalman estimated-state':'Disabled';
   const revision=(import.meta.env.VITE_BUILD_SHA||'local-dev').slice(0,10);
 
@@ -132,6 +134,7 @@ export default function App(){
         setPresetId={setPresetId}
         onRun={runSimulation}
         onReset={resetSimulation}
+        runRevision={runRevision}
       />
       {view}
     </div>

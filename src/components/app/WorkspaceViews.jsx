@@ -50,10 +50,10 @@ export function ScenariosView({draftCfg,setDraftCfg,presetId,setPresetId,onRun,n
         <div className="scenario-top"><span className="scenario-icon"><Sparkles size={16}/></span>{active&&<span className="scenario-selected"><CheckCircle2 size={12}/>Selected</span>}</div>
         <h3>{preset.label}</h3><p>{preset.description}</p>
         <div className="scenario-tags"><span>{preset.patch?.estimation?.enabled?'Estimator':'State truth'}</span><span>{preset.patch?.truthPlant?.enabled?'Model mismatch':'Nominal plant'}</span><span>{preset.patch?.mpc?.stateConstraintsEnabled?'State constraints':'Actuator constraints'}</span></div>
-        <button onClick={()=>select(preset.id)}>{active?'Loaded':'Load scenario'}</button>
+        <button type="button" disabled={active} onClick={()=>select(preset.id)}>{active?'Loaded':'Load scenario'}</button>
       </article>;
     })}</section>
-    <section className="scenario-actionbar"><div><strong>Draft scenario: {EXPERIMENT_PRESETS.find((p)=>p.id===presetId)?.label||'Custom'}</strong><span>Changes remain draft until Run Simulation.</span></div><button onClick={()=>{onRun();navigate('simulation');}}><Zap size={15}/>Run selected scenario</button></section>
+    <section className="scenario-actionbar"><div><strong>Draft scenario: {EXPERIMENT_PRESETS.find((p)=>p.id===presetId)?.label||'Custom'}</strong><span>Changes remain draft until Run Simulation.</span></div><button type="button" onClick={()=>{onRun();navigate('simulation');}}><Zap size={15}/>Run selected scenario</button></section>
   </main>;
 }
 

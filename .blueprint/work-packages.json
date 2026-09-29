@@ -594,6 +594,32 @@
       "productionAuthority": false
     },
     {
+      "id": "QA-E2A",
+      "title": "QA-E2A — UI Interaction Consistency Regression",
+      "status": "PASS",
+      "dependsOn": [
+        "QA-E2"
+      ],
+      "track": "MPC_PID_CONTINUOUS_RESEARCH_PRODUCT_QUALITY",
+      "gates": [
+        "selected-mode-view",
+        "semantic-control-state",
+        "reset-state",
+        "presentation-regression",
+        "architecture-boundary",
+        "build"
+      ],
+      "evidence": [
+        "Simulation mode selection now owns the response chart, control chart, metrics, solver health, safety governor state, recent events and application status",
+        "Simulation response signal selector is a functional Position/Velocity select control",
+        "Control Configuration disclosure, tabs, run feedback, current-selection disabled states and explicit button types are enforced by repeatable UI interaction regression",
+        "Reset restores default configuration, baseline preset, HYBRID_SAFE mode and clears stale matrix results",
+        "UI interaction regression, presentation contract, architecture check, control QA, full smoke, full benchmark and production build pass on the implementation branch",
+        "browser acceptance verifies mode/chart switching, navigation, tabs, reset, theme, persistence, scenario and matrix controls after Pages deployment"
+      ],
+      "productionAuthority": false
+    },
+    {
       "id": "QA-E3",
       "title": "QA-E3 — Numerical Verification Framework",
       "status": "QUEUED",
