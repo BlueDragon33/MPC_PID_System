@@ -71,6 +71,14 @@ for(const viewport of viewports){
       h1Count:document.querySelectorAll('h1').length,
       navButtonCount:document.querySelectorAll('.top-nav button').length,
       focusableCount:document.querySelectorAll('button,a[href],input,select,textarea,[tabindex]:not([tabindex="-1"])').length,
+      bodyFontSize:getComputedStyle(document.body).fontSize,
+      iconGeometry:[...document.querySelectorAll('.top-nav button svg,.theme-control svg,.sidebar-heading svg,.card-head svg')]
+        .filter(visible)
+        .slice(0,30)
+        .map((icon)=>{
+          const rect=icon.getBoundingClientRect();
+          return {width:rect.width,height:rect.height};
+        }),
     };
   });
 
@@ -80,6 +88,8 @@ for(const viewport of viewports){
   if(!snapshot.hasResearchContextHeader) report.defects.push({viewport:viewport.name,id:'missing-research-context-header'});
   if(!snapshot.hasThemeControl) report.defects.push({viewport:viewport.name,id:'missing-theme-control'});
   if(!snapshot.safetyContextVisible) report.defects.push({viewport:viewport.name,id:'missing-safety-context'});
+  if(snapshot.bodyFontSize!=='16px') report.defects.push({viewport:viewport.name,id:'default-font-size',value:snapshot.bodyFontSize});
+  if(snapshot.iconGeometry.some(({width,height})=>Math.abs(width-height)>0.5||width<14)) report.defects.push({viewport:viewport.name,id:'unbalanced-icon-geometry'});
 
   let light=null;
   if(snapshot.hasThemeControl){
@@ -99,7 +109,68 @@ for(const viewport of viewports){
     if(light.horizontalOverflow) report.defects.push({viewport:viewport.name,id:'horizontal-overflow-light'});
   }
 
-  report.viewports.push({...viewport,...snapshot,light});
+  let largeText=null;
+  if(viewport.width<=430){
+    await page.locator('[data-nav-id="settings"]').click();
+    await page.locator('select[data-preference="language"]').selectOption('en-ru');
+    await page.locator('select[data-preference="language"]').selectOption('vi-ru');
+    await page.locator('select[data-preference="language"]').selectOption('en-vi');
+    await page.locator('select[data-preference="fontSize"]').selectOption('18');
+    await page.locator('select[data-preference="background"]').selectOption('soft');
+    await page.locator('select[data-preference="fontFamily"]').selectOption('serif');
+    await page.locator('select[data-preference="contrast"]').selectOption('high');
+    await page.waitForFunction(()=>document.documentElement.dataset.fontSize==='18');
+    await page.reload({waitUntil:'networkidle'});
+    await page.locator('[data-nav-id="settings"]').click();
+    largeText=await page.evaluate(()=>({
+      fontSize:getComputedStyle(document.body).fontSize,
+      horizontalOverflow:document.documentElement.scrollWidth>window.innerWidth+1,
+      background:document.documentElement.dataset.background,
+      fontFamily:document.documentElement.dataset.fontFamily,
+      contrast:document.documentElement.dataset.contrast,
+      language:document.documentElement.lang,
+      selections:Object.fromEntries([...document.querySelectorAll('select[data-preference]')].map((select)=>[
+        select.dataset.preference,
+        select.value,
+      ])),
+      iconGeometry:[...document.querySelectorAll('.top-nav button svg,.theme-control svg,.sidebar-heading svg,.card-head svg')]
+        .filter((icon)=>{
+          const style=getComputedStyle(icon);
+          const rect=icon.getBoundingClientRect();
+          return style.display!=='none'&&style.visibility!=='hidden'&&rect.width>0&&rect.height>0;
+        })
+        .map((icon)=>{
+          const rect=icon.getBoundingClientRect();
+          return {width:rect.width,height:rect.height};
+        }),
+    }));
+    await page.screenshot({
+      path:path.join(outDir,`${viewport.name}-bilingual-large-high-contrast.png`),
+      fullPage:true,
+    });
+    if(largeText.fontSize!=='18px') report.defects.push({viewport:viewport.name,id:'large-font-size-not-applied'});
+    if(largeText.horizontalOverflow) report.defects.push({viewport:viewport.name,id:'horizontal-overflow-large-text'});
+    if(largeText.background!=='soft'||largeText.fontFamily!=='serif'||largeText.contrast!=='high'||largeText.language!=='en'){
+      report.defects.push({viewport:viewport.name,id:'preferences-not-persisted',largeText});
+    }
+    if(JSON.stringify(largeText.selections)!==JSON.stringify({language:'en-vi',fontSize:'18',background:'soft',fontFamily:'serif',contrast:'high'})){
+      report.defects.push({viewport:viewport.name,id:'settings-controls-not-persisted',selections:largeText.selections});
+    }
+    if(largeText.iconGeometry.some(({width,height})=>Math.abs(width-height)>0.5||width<14)){
+      report.defects.push({viewport:viewport.name,id:'unbalanced-icon-geometry-large-text'});
+    }
+    await page.locator('[data-theme-control]').click();
+    await page.waitForFunction(()=>document.documentElement.dataset.background==='dark');
+    const themeControlSync=await page.evaluate(()=>({
+      background:document.documentElement.dataset.background,
+      selection:document.querySelector('select[data-preference="background"]')?.value,
+    }));
+    if(themeControlSync.background!=='dark'||themeControlSync.selection!=='dark'){
+      report.defects.push({viewport:viewport.name,id:'theme-control-settings-out-of-sync',themeControlSync});
+    }
+  }
+
+  report.viewports.push({...viewport,...snapshot,light,largeText});
   await page.close();
 }
 

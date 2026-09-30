@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "qa:ui-preferences": "node scripts/uiPreferencesContract.mjs && node scripts/uiPreferencesIntegration.mjs && node scripts/uiAppearanceContract.mjs",
     "qa:ui-interactions": "node scripts/uiInteractionRegression.mjs && node scripts/experimentMatrixWorkerContract.mjs",
     "preview": "vite preview",
     "smoke": "node scripts/smoke.mjs && node scripts/experimentRoundtrip.mjs && node scripts/experimentMatrixSmoke.mjs && node scripts/estimationSmoke.mjs && node scripts/closedLoopEstimationSmoke.mjs && node scripts/uncertaintyTighteningSmoke.mjs && node scripts/estimatedSafetySmoke.mjs && node scripts/disturbanceEstimationSmoke.mjs && node scripts/modelMismatchObserverSmoke.mjs && node scripts/disturbancePredictionMonitorSmoke.mjs && node scripts/affineDisturbanceQPSmoke.mjs && node scripts/mpcDisturbanceCompensationProbe.mjs && node scripts/disturbanceCompensationMatrix.mjs && node scripts/gate4bCloseout.mjs && node scripts/parameterIdentificationSmoke.mjs && node scripts/adaptiveModelSupervisorSmoke.mjs && node scripts/adaptiveSupervisorPersistentExcitationSmoke.mjs && node scripts/adaptiveShadowReplaySmoke.mjs && node scripts/ugvBicycleBaselineSmoke.mjs && node scripts/ugvBicycleEkfSmoke.mjs && node scripts/ugvPredictiveGovernorSmoke.mjs && node scripts/uavPlanarBaselineSmoke.mjs && node scripts/uavPlanarEkfSmoke.mjs && node scripts/uavPlanarPredictiveGovernorSmoke.mjs && node scripts/usvPlanarBaselineSmoke.mjs && node scripts/usvPlanarEkfSmoke.mjs",

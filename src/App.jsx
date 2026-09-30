@@ -7,14 +7,15 @@ import ResearchAnalysis from './components/app/ResearchAnalysis.jsx';
 import SimulationDashboard from './components/app/SimulationDashboard.jsx';
 import { DocumentationView, SettingsView } from './components/app/WorkspaceViews.jsx';
 import { useWorkbenchController } from './components/app/useWorkbenchController.js';
+import { useUiPreferences } from './interface/UiPreferencesContext.jsx';
 import './solverDiagnostics.css';
 
 const navItems = [
-  { id:'simulation', label:'Simulation', icon:Play },
-  { id:'analysis', label:'Analysis', icon:BarChart3 },
-  { id:'scenarios', label:'Scenarios', icon:Database },
-  { id:'documentation', label:'Documentation', icon:BookOpen },
-  { id:'settings', label:'Settings', icon:Settings },
+  { id:'simulation', labelKey:'nav.simulation', icon:Play },
+  { id:'analysis', labelKey:'nav.analysis', icon:BarChart3 },
+  { id:'scenarios', labelKey:'nav.scenarios', icon:Database },
+  { id:'documentation', labelKey:'nav.documentation', icon:BookOpen },
+  { id:'settings', labelKey:'nav.settings', icon:Settings },
 ];
 
 const MODE_CONTEXT={
@@ -25,14 +26,15 @@ const MODE_CONTEXT={
 };
 
 function statusSummary(result){
-  if(!result?.metrics) return { key:'idle', label:'Idle' };
-  if((result.metrics.safetyViolationCount??0)>0) return { key:'degraded', label:'Unsafe observed' };
-  if((result.metrics.fallbackCount??0)>0) return { key:'fallback', label:'Completed · fallback' };
-  if((result.metrics.convergenceRate??100)<99.9) return { key:'degraded', label:'Completed · degraded' };
-  return { key:'ready', label:'Completed' };
+  if(!result?.metrics) return { key:'idle', labelKey:'status.idle' };
+  if((result.metrics.safetyViolationCount??0)>0) return { key:'degraded', labelKey:'status.unsafe' };
+  if((result.metrics.fallbackCount??0)>0) return { key:'fallback', labelKey:'status.fallback' };
+  if((result.metrics.convergenceRate??100)<99.9) return { key:'degraded', labelKey:'status.degraded' };
+  return { key:'ready', labelKey:'status.ready' };
 }
 
 export default function App(){
+  const { preferences, t, toggleBackground } = useUiPreferences();
   const {
     activeMode,
     activeNav,
@@ -60,47 +62,39 @@ export default function App(){
   if(activeNav==='documentation') view=<DocumentationView/>;
   if(activeNav==='settings') view=<SettingsView draftCfg={draftCfg} setDraftCfg={setDraftCfg}/>;
 
-  const [theme,setTheme]=React.useState(()=>{
-    try { return window.localStorage.getItem('mpc-pid-theme')||'dark'; }
-    catch { return 'dark'; }
-  });
-  React.useEffect(()=>{
-    document.documentElement.dataset.theme=theme;
-    try { window.localStorage.setItem('mpc-pid-theme',theme); } catch {}
-  },[theme]);
-
   const activeResult=results.find((result)=>result.mode===activeMode)||governed;
   const status=statusSummary(activeResult);
   const safetyViolations=activeResult?.metrics?.safetyViolationCount??0;
-  const estimatorLabel=runCfg.estimation?.enabled?'Kalman estimated-state':'Disabled';
+  const estimatorLabel=runCfg.estimation?.enabled?t('context.estimationOn'):t('common.disabled');
   const revision=(import.meta.env.VITE_BUILD_SHA||'local-dev').slice(0,10);
 
   return <div className="control-app">
     <header className="app-topbar">
       <button type="button" className="app-brand brand-button" onClick={()=>navigate('simulation')} aria-label="Open simulation home">
         <div className="app-logo" aria-hidden="true"><Cpu size={24}/></div>
-        <div><strong>MPC-PID Control System</strong><span>Research • Simulation • Visualization</span></div>
+        <div><strong>MPC-PID Control System</strong><span>{t('brand.subtitle')}</span></div>
       </button>
       <nav className="top-nav" aria-label="Main navigation">
-        {navItems.map(({id,label,icon:Icon})=><button
+        {navItems.map(({id,labelKey,icon:Icon})=><button
           type="button"
           key={id}
+          data-nav-id={id}
           className={activeNav===id?'active':''}
           aria-current={activeNav===id?'page':undefined}
           onClick={()=>navigate(id)}
-        ><Icon size={16} aria-hidden="true"/>{label}</button>)}
+        ><Icon aria-hidden="true"/><span>{t(labelKey)}</span></button>)}
       </nav>
       <div className="app-status" aria-live="polite">
-        <span className={`status-pill status-${status.key}`}><CircleDot size={11} aria-hidden="true"/>{status.label}</span>
+        <span className={`status-pill status-${status.key}`}><CircleDot aria-hidden="true"/>{t(status.labelKey)}</span>
         <button
           type="button"
           className="theme-control"
           data-theme-control
-          aria-label={theme==='dark'?'Switch to light theme':'Switch to dark theme'}
-          onClick={()=>setTheme((current)=>current==='dark'?'light':'dark')}
+          aria-label={preferences.background==='dark'?t('theme.switchLight'):t('theme.switchDark')}
+          onClick={toggleBackground}
         >
-          {theme==='dark'?<Sun size={15} aria-hidden="true"/>:<Moon size={15} aria-hidden="true"/>}
-          <span>{theme==='dark'?'Light':'Dark'}</span>
+          {preferences.background==='dark'?<Sun aria-hidden="true"/>:<Moon aria-hidden="true"/>}
+          <span>{preferences.background==='dark'?t('theme.light'):t('theme.dark')}</span>
         </button>
         <span className="repo-mark"><Cpu size={19} aria-hidden="true"/>MPC_PID_System</span>
       </div>
@@ -108,19 +102,19 @@ export default function App(){
 
     <section className="research-context-header" aria-label="Research context">
       <div className="context-primary">
-        <span className="context-eyebrow">Research context</span>
-        <h1>Linear control benchmark</h1>
-        <span>Deterministic simulation workbench</span>
+        <span className="context-eyebrow">{t('context.eyebrow')}</span>
+        <h1>{t('context.title')}</h1>
+        <span>{t('context.subtitle')}</span>
       </div>
       <dl className="context-grid">
-        <div><dt>Plant</dt><dd>Second-order plant</dd></div>
-        <div><dt>Controller</dt><dd>{MODE_CONTEXT[activeMode]||activeMode}</dd></div>
-        <div><dt>Estimator</dt><dd>{estimatorLabel}</dd></div>
+        <div><dt>{t('context.plant')}</dt><dd>Second-order plant</dd></div>
+        <div><dt>{t('context.controller')}</dt><dd>{MODE_CONTEXT[activeMode]||activeMode}</dd></div>
+        <div><dt>{t('context.estimator')}</dt><dd>{estimatorLabel}</dd></div>
         <div className={safetyViolations===0?'context-safety safe':'context-safety unsafe'}>
-          <dt><ShieldCheck size={13} aria-hidden="true"/>Actual safety</dt>
-          <dd>{safetyViolations===0?'No violations observed':`${safetyViolations} violations observed`}</dd>
+          <dt><ShieldCheck aria-hidden="true"/>{t('context.safety')}</dt>
+          <dd>{safetyViolations===0?t('context.noViolations'):`${safetyViolations} ${t('context.violations')}`}</dd>
         </div>
-        <div><dt>Revision</dt><dd><code>{revision}</code></dd></div>
+        <div><dt>{t('context.revision')}</dt><dd><code>{revision}</code></dd></div>
       </dl>
     </section>
 

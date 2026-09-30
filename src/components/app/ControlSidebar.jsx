@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ChevronDown, Gauge, Play, RotateCcw, SlidersHorizontal } from 'lucide-react';
 import ExperimentSafetyPanel from '../ExperimentSafetyPanel.jsx';
 import { SOLVER_BACKENDS } from '../../application/workbench.js';
+import { useUiPreferences } from '../../interface/UiPreferencesContext.jsx';
 
 const MODES = ['PID', 'MPC', 'HYBRID', 'HYBRID_SAFE'];
 const MODE_LABELS = {
@@ -23,6 +24,7 @@ function ToggleField({ label, checked, onChange }) {
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
 export default function ControlSidebar({ draftCfg, setDraftCfg, activeMode, setActiveMode, presetId, setPresetId, onRun, onReset, runRevision }) {
+  const { t } = useUiPreferences();
   const [leftTab, setLeftTab] = useState('pid');
   const [controlExpanded, setControlExpanded] = useState(true);
   const update = (group, key, value) => setDraftCfg((current) => group
@@ -32,11 +34,11 @@ export default function ControlSidebar({ draftCfg, setDraftCfg, activeMode, setA
   return <aside className="control-sidebar">
     <section className="sidebar-section control-config">
       <button type="button" className="sidebar-heading sidebar-disclosure" aria-expanded={controlExpanded} onClick={() => setControlExpanded((expanded) => !expanded)}>
-        <SlidersHorizontal size={17}/><strong>Control Configuration</strong><ChevronDown className={controlExpanded ? 'expanded' : ''} size={15}/>
+        <SlidersHorizontal aria-hidden="true"/><strong>{t('sidebar.controlConfiguration')}</strong><ChevronDown className={controlExpanded ? 'expanded' : ''} aria-hidden="true"/>
       </button>
       {controlExpanded && <div className="control-config-content">
-        <SelectField label="Control Mode" value={activeMode} onChange={setActiveMode} options={MODES.map((mode) => ({ value: mode, label: MODE_LABELS[mode] }))}/>
-        <small className="field-hint">Select one controller to inspect. Use Analysis for the full four-mode comparison.</small>
+        <SelectField label={t('sidebar.controlMode')} value={activeMode} onChange={setActiveMode} options={MODES.map((mode) => ({ value: mode, label: MODE_LABELS[mode] }))}/>
+        <small className="field-hint">{t('sidebar.modeHint')}</small>
         <div className="config-tabs" role="tablist" aria-label="Controller settings">
           {['pid','mpc','trigger','safety'].map((tab) => <button type="button" role="tab" aria-selected={leftTab === tab} key={tab} className={leftTab === tab ? 'active' : ''} onClick={() => setLeftTab(tab)}>{tab.toUpperCase()}</button>)}
         </div>
@@ -76,14 +78,14 @@ export default function ControlSidebar({ draftCfg, setDraftCfg, activeMode, setA
     </section>
 
     <section className="sidebar-section sim-settings">
-      <div className="sidebar-heading"><Gauge size={17}/><strong>Simulation Settings</strong></div>
-      <NumberField label="Simulation Time (s)" value={draftCfg.duration} step={1} onChange={(v) => update(null,'duration',Math.max(1,v))}/>
-      <NumberField label="Sample Time (s)" value={draftCfg.dt} step={0.005} onChange={(v) => update(null,'dt',clamp(v,0.005,0.2))}/>
-      <NumberField label="Reference Value" value={draftCfg.setpoint} step={0.1} onChange={(v) => update(null,'setpoint',v)}/>
-      <ToggleField label="Disturbance" checked={draftCfg.disturbance.enabled} onChange={(v) => update('disturbance','enabled',v)}/>
-      <button type="button" className="run-button" onClick={onRun}><Play size={16} fill="currentColor"/>Run Simulation</button>
-      <button type="button" className="reset-button" onClick={onReset}><RotateCcw size={15}/>Reset</button>
-      <p className="run-feedback" aria-live="polite">Run applied · #{runRevision}</p>
+      <div className="sidebar-heading"><Gauge aria-hidden="true"/><strong>{t('sidebar.simulationSettings')}</strong></div>
+      <NumberField label={t('sidebar.simulationTime')} value={draftCfg.duration} step={1} onChange={(v) => update(null,'duration',Math.max(1,v))}/>
+      <NumberField label={t('sidebar.sampleTime')} value={draftCfg.dt} step={0.005} onChange={(v) => update(null,'dt',clamp(v,0.005,0.2))}/>
+      <NumberField label={t('sidebar.referenceValue')} value={draftCfg.setpoint} step={0.1} onChange={(v) => update(null,'setpoint',v)}/>
+      <ToggleField label={t('sidebar.disturbance')} checked={draftCfg.disturbance.enabled} onChange={(v) => update('disturbance','enabled',v)}/>
+      <button type="button" className="run-button" onClick={onRun}><Play aria-hidden="true" fill="currentColor"/>{t('sidebar.run')}</button>
+      <button type="button" className="reset-button" onClick={onReset}><RotateCcw aria-hidden="true"/>{t('sidebar.reset')}</button>
+      <p className="run-feedback" aria-live="polite">{t('sidebar.runApplied')} · #{runRevision}</p>
     </section>
 
     <section className="sidebar-section presets-section"><ExperimentSafetyPanel cfg={draftCfg} setCfg={setDraftCfg} presetId={presetId} setPresetId={setPresetId}/></section>

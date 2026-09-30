@@ -30,8 +30,8 @@ assert.match(appSource, /aria-label="Main navigation"/, 'main navigation require
 assert.match(appSource, /type="button"/, 'navigation buttons must declare button type');
 assert.match(appSource, /research-context-header/, 'research context header must be present');
 assert.match(appSource, /data-theme-control/, 'theme control must be present');
-assert.match(appSource, /Actual safety/, 'actual plant safety context must be explicit');
-assert.match(appSource, /<h1>Linear control benchmark<\/h1>/, 'workbench requires a semantic primary heading');
+assert.match(appSource, /context\.safety/, 'actual plant safety context must be explicit and localized');
+assert.match(appSource, /<h1>\{t\('context\.title'\)\}<\/h1>/, 'workbench requires a localized semantic primary heading');
 
 const dashboardSource = fs.readFileSync(path.join(process.cwd(), 'src', 'components', 'app', 'SimulationDashboard.jsx'), 'utf8');
 assert.doesNotMatch(dashboardSource, />Optimal</, 'solver UI must not hard-code an Optimal claim');
