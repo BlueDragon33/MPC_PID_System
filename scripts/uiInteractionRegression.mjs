@@ -46,7 +46,7 @@ assert.deepEqual(missingButtonTypes, [], `all buttons must declare type=button: 
 
 const sidebarSource = fs.readFileSync(path.join(process.cwd(), 'src/components/app/ControlSidebar.jsx'), 'utf8');
 assert.match(sidebarSource, /aria-expanded=\{controlExpanded\}/, 'configuration chevron must be a functional disclosure control');
-assert.match(sidebarSource, /Run applied/, 'Run Simulation needs visible confirmation');
+assert.match(sidebarSource, /sidebar\.runApplied/, 'Run Simulation needs localized visible confirmation');
 
 const controllerSource = fs.readFileSync(path.join(process.cwd(), 'src/components/app/useWorkbenchController.js'), 'utf8');
 assert.match(controllerSource, /normalizeControlMode/, 'recovered control mode must be normalized');
