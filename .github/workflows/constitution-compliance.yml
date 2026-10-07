@@ -12,3 +12,34 @@ permissions:
 jobs:
   constitution:
     uses: BlueDragon33/Software-Blueprint-Hub/.github/workflows/constitution-compliance.yml@main
+
+  dependency-sovereignty:
+    name: Constitution 1.2 MPC/PID dependency sovereignty
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Validate project dependency budget
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          a=json.loads(Path(".blueprint/constitution-adoption.json").read_text())
+          b=json.loads(Path(".blueprint/dependency-budget.json").read_text())
+          assert a["policyVersion"]=="1.2.0"
+          assert "operational-sovereignty-dependency-minimization" in a["inheritedPillars"]
+          assert b["policyVersion"]=="1.2.0"
+          assert b["projectId"]==a["projectId"]=="project:mpc-pid-system"
+          assert b["posture"]=="LOCAL_DETERMINISTIC_CONTROL_AND_SIMULATION"
+          assert b["complianceState"]=="MIGRATION_REQUIRED"
+          deps={d["id"]:d for d in b["dependencies"]}
+          assert deps["local-control-runtime"]["class"]=="LOCAL_CORE"
+          assert deps["ai-provider"]["class"]=="OPTIONAL_INTELLIGENCE"
+          for d in b["dependencies"]:
+              assert d.get("offlineBehavior")
+              assert d.get("exitPath")
+          forbidden=set(b["forbidden"])
+          assert {"cloud-required-control-loop","drive-or-sheets-as-live-control-authority","ai-owned-controller-truth"} <= forbidden
+          assert b["productionAuthority"]=="separate-explicit-release-gate"
+          print("MPC/PID Constitution 1.2 dependency sovereignty: PASS")
+          PY
