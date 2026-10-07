@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "policyId": "blueprint-os:universal-century-grade",
-  "policyVersion": "1.1.0",
+  "policyVersion": "1.2.0",
   "projectId": "project:mpc-pid-system",
   "blueprintLevel": "B3",
   "enforcementMode": "enforced",
@@ -11,7 +11,8 @@
     "product-elegance",
     "premium-usability",
     "long-term-durability",
-    "fortress-security-disaster-resilience"
+    "fortress-security-disaster-resilience",
+    "operational-sovereignty-dependency-minimization"
   ],
   "disabledPillars": [],
   "constitutionalWaivers": [],

@@ -67,3 +67,14 @@ The repository is migrated in place, not rebuilt as a big-bang rewrite:
 - WP07 performs Release-mode hardening and exact-head evidence.
 
 Every WP must keep regression gates green before the next WP becomes ACTIVE.
+
+
+## Constitution 1.2 dependency boundary
+
+The canonical control and safety graph is local:
+
+`sensor/model → estimator → trigger → MPC/PID → safety governor → plant/simulation`
+
+Remote services sit strictly outside that graph. Hosting may publish the UI, Drive may archive portable experiment files, and AI may advise, but none can become runtime authority for control, safety, deterministic regression or experiment truth.
+
+See `.blueprint/dependency-budget.json`.

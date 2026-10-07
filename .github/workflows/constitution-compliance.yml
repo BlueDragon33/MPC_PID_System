@@ -12,3 +12,27 @@ permissions:
 jobs:
   constitution:
     uses: BlueDragon33/Software-Blueprint-Hub/.github/workflows/constitution-compliance.yml@main
+
+  dependency-sovereignty:
+    name: Constitution 1.2 dependency sovereignty
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate local deterministic control authority
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          a=json.loads(Path(".blueprint/constitution-adoption.json").read_text())
+          b=json.loads(Path(".blueprint/dependency-budget.json").read_text())
+          assert a["policyVersion"]=="1.2.0"
+          assert "operational-sovereignty-dependency-minimization" in a["inheritedPillars"]
+          assert b["policyVersion"]=="1.2.0"
+          assert b["projectId"]==a["projectId"]
+          assert b["posture"]=="LOCAL_CORE"
+          forbidden=set(b.get("forbidden",[]))
+          assert {"cloud-in-closed-loop-control","drive-or-apps-script-in-control-loop","ai-owned-safety-governor-authority"} <= forbidden
+          print("MPC/PID Constitution 1.2 local-control sovereignty: PASS")
+          PY

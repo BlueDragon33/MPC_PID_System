@@ -1,0 +1,58 @@
+{
+  "schemaVersion": "1.0.0",
+  "policyId": "blueprint-os:universal-century-grade",
+  "policyVersion": "1.2.0",
+  "projectId": "project:mpc-pid-system",
+  "posture": "LOCAL_CORE",
+  "canonicalAuthority": {
+    "controlLoop": "local-deterministic-runtime",
+    "safetyGovernor": "local-deterministic-runtime",
+    "experimentState": "local-portable-json",
+    "publishedUI": "optional-static-hosting"
+  },
+  "dependencies": [
+    {
+      "id": "browser-local-runtime",
+      "class": "LOCAL_CORE",
+      "costClass": "local-free",
+      "purpose": "Simulation, estimation, MPC/PID, safety and experiment execution",
+      "dataBoundary": "local browser/process",
+      "offlineBehavior": "Core research workbench remains usable offline after assets are available",
+      "exitPath": "Portable JavaScript/experiment JSON and deterministic fixtures"
+    },
+    {
+      "id": "static-hosting",
+      "class": "OPTIONAL_PUBLISH",
+      "costClass": "free-or-optional-paid",
+      "purpose": "Optional public UI publication",
+      "dataBoundary": "Static application assets only",
+      "offlineBehavior": "Local development/build remains authoritative",
+      "exitPath": "Any static host or local file server"
+    },
+    {
+      "id": "google-drive-or-equivalent",
+      "class": "OPTIONAL_SYNC",
+      "costClass": "free-or-optional-paid",
+      "purpose": "Optional backup/archive of exported experiments and reports",
+      "dataBoundary": "Portable experiment/report files only",
+      "offlineBehavior": "No effect on control/simulation",
+      "exitPath": "Files remain provider-independent"
+    },
+    {
+      "id": "ai-provider",
+      "class": "OPTIONAL_INTELLIGENCE",
+      "costClass": "optional",
+      "purpose": "Research explanation, analysis and code assistance",
+      "dataBoundary": "Explicitly supplied experiment context only",
+      "offlineBehavior": "Core control algorithms and safety gates remain local",
+      "exitPath": "Provider replaceable"
+    }
+  ],
+  "forbidden": [
+    "cloud-in-closed-loop-control",
+    "drive-or-apps-script-in-control-loop",
+    "ai-owned-safety-governor-authority",
+    "remote-provider-required-for-deterministic-regression",
+    "mandatory-paid-runtime-for-core-simulation"
+  ]
+}
