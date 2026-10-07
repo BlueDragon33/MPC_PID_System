@@ -336,3 +336,19 @@ Build production:
 ```bash
 npm run build
 ```
+
+
+## Operational sovereignty
+
+MPC_PID_System adopts **Universal Constitution 1.2.0** at **B3**.
+
+Default posture: **LOCAL_CORE**.
+
+- MPC/PID, estimation, Event Trigger and Safety Governor execute locally and deterministically.
+- No cloud service, Google Drive/Apps Script or AI provider may participate in the closed-loop control or safety authority path.
+- Static hosting is optional publication only.
+- Google Drive or equivalent may optionally archive exported experiments/reports.
+- AI may assist research/analysis, but never owns controller/safety truth.
+- Deterministic regressions must remain runnable without a paid remote runtime.
+
+Canonical dependency posture: `.blueprint/dependency-budget.json`.
