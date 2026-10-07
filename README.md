@@ -336,3 +336,12 @@ Build production:
 ```bash
 npm run build
 ```
+
+
+## Operational sovereignty
+
+This repository adopts **Universal Constitution 1.2.0** at Blueprint Level **B3**.
+
+PID/MPC control and simulation are **LOCAL_CORE** deterministic capabilities. Cloud/AI/Drive integrations are optional downstream helpers only; they must never enter the live control loop or become canonical controller truth.
+
+Canonical dependency posture: `.blueprint/dependency-budget.json`.

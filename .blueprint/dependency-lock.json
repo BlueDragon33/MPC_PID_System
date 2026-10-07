@@ -3,7 +3,7 @@
   "strategy": "generated-lock-hash",
   "productionAuthority": false,
   "nodeMajor": 22,
-  "expectedLockSha256": "2e167cfb6c7602f05d61674d9539b3f3e231d95ddaa338699a8620dc48b19e69",
+  "expectedLockSha256": "be05565b0692c01733a3e8649f553d6bc92b8554ab993f4c4fbb16db724352ee",
   "status": "locked",
   "exactTopLevelDependencies": {
     "@vitejs/plugin-react": "6.1.1",
@@ -19,8 +19,12 @@
     "A changed transitive resolution fails readiness until the lock blueprint is intentionally reviewed and updated."
   ],
   "bootstrapEvidence": {
-    "workflowRun": 36378755746,
-    "generatedAt": "2026-09-28T04:41:21Z",
-    "source": "GitHub Actions Node 22 runner"
+    "workflowRun": 37578122809,
+    "generatedAt": "2026-10-07T05:49:47Z",
+    "source": "GitHub Actions Node 22 runner",
+    "artifactId": 11463840420,
+    "artifactDigest": "sha256:2fdea120328b02f6950bf13fc4409c6c6bb55f5a38a0ea6032ce380284fb327b",
+    "reviewedCandidateLockSha256": "be05565b0692c01733a3e8649f553d6bc92b8554ab993f4c4fbb16db724352ee",
+    "reviewNote": "Candidate lock reviewed: 66 packages, all resolved hosts registry.npmjs.org, exact top-level dependency versions unchanged."
   }
 }

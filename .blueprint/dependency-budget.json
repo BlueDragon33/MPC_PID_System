@@ -1,0 +1,65 @@
+{
+  "schemaVersion": "1.0.0",
+  "policyId": "blueprint-os:universal-century-grade",
+  "policyVersion": "1.2.0",
+  "projectId": "project:mpc-pid-system",
+  "blueprintLevel": "B3",
+  "posture": "LOCAL_DETERMINISTIC_CONTROL_AND_SIMULATION",
+  "complianceState": "MIGRATION_REQUIRED",
+  "canonicalAuthority": {
+    "controlAlgorithms": "local-source-and-local-runtime",
+    "tuningAndSimulation": "local-runtime",
+    "plantTelemetry": "local-or-explicitly-configured-device-link",
+    "remoteServices": "optional-observe-export-only"
+  },
+  "dependencies": [
+    {
+      "id": "local-control-runtime",
+      "class": "LOCAL_CORE",
+      "costClass": "local-free",
+      "purpose": "PID/MPC simulation, tuning and deterministic control logic",
+      "dataBoundary": "local machine/device",
+      "offlineBehavior": "core simulation/control remains usable without Internet",
+      "exitPath": "portable source/config/log files"
+    },
+    {
+      "id": "google-drive-or-equivalent",
+      "class": "OPTIONAL_SYNC",
+      "costClass": "free-or-optional-paid",
+      "purpose": "optional report/config backup",
+      "dataBoundary": "sanitized configs/reports only; no live control authority",
+      "offlineBehavior": "no impact on control/simulation",
+      "exitPath": "portable files"
+    },
+    {
+      "id": "ai-provider",
+      "class": "OPTIONAL_INTELLIGENCE",
+      "costClass": "optional",
+      "purpose": "explanation, tuning suggestions and code assistance",
+      "dataBoundary": "explicitly selected model/config context only",
+      "offlineBehavior": "deterministic control/simulation remains available",
+      "exitPath": "disable/replace provider"
+    },
+    {
+      "id": "remote-hosting-or-telemetry",
+      "class": "OPTIONAL_PUBLISH",
+      "costClass": "free-tier-or-optional-paid",
+      "purpose": "optional dashboards/telemetry publishing",
+      "dataBoundary": "observability data only unless separately authorized",
+      "offlineBehavior": "local control continues",
+      "exitPath": "replaceable telemetry adapter"
+    }
+  ],
+  "forbidden": [
+    "cloud-required-control-loop",
+    "drive-or-sheets-as-live-control-authority",
+    "ai-owned-controller-truth",
+    "mandatory-paid-provider-for-core-simulation-or-control"
+  ],
+  "migrationBlockers": [
+    "Prove local deterministic control/simulation path without cloud providers.",
+    "Keep any remote telemetry downstream and non-authoritative.",
+    "Document portable config/report export before optional sync."
+  ],
+  "productionAuthority": "separate-explicit-release-gate"
+}
