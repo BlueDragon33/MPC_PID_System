@@ -1,10 +1,13 @@
 name: MPC PID Live Pages
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
+    inputs:
+      enable_online_release:
+        type: boolean
+        required: true
+        default: false
+        description: "Explicit future online release, offline mode otherwise"
 
 permissions:
   contents: read
@@ -56,17 +59,17 @@ jobs:
           retention-days: 3
 
       - name: Configure Pages
-        if: ${{ steps.detect.outputs.enabled == 'true' }}
+        if: ${{ steps.detect.outputs.enabled == 'true' && inputs.enable_online_release == true }}
         uses: actions/configure-pages@v5
 
       - name: Upload Pages artifact
-        if: ${{ steps.detect.outputs.enabled == 'true' }}
+        if: ${{ steps.detect.outputs.enabled == 'true' && inputs.enable_online_release == true }}
         uses: actions/upload-pages-artifact@v4
         with:
           path: dist
 
   deploy:
-    if: ${{ needs.build.outputs.pages_enabled == 'true' }}
+    if: ${{ needs.build.outputs.pages_enabled == 'true' && inputs.enable_online_release == true }}
     needs: build
     runs-on: ubuntu-24.04
     environment:
