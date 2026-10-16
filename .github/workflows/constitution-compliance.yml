@@ -14,7 +14,7 @@ jobs:
     uses: BlueDragon33/Software-Blueprint-Hub/.github/workflows/constitution-compliance.yml@main
 
   dependency-sovereignty:
-    name: Constitution 1.2 MPC/PID dependency sovereignty
+    name: Constitution 1.3 MPC/PID dependency sovereignty
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -26,9 +26,9 @@ jobs:
           from pathlib import Path
           a=json.loads(Path(".blueprint/constitution-adoption.json").read_text())
           b=json.loads(Path(".blueprint/dependency-budget.json").read_text())
-          assert a["policyVersion"]=="1.2.0"
+          assert a["policyVersion"]=="1.3.0"
           assert "operational-sovereignty-dependency-minimization" in a["inheritedPillars"]
-          assert b["policyVersion"]=="1.2.0"
+          assert b["policyVersion"]=="1.3.0"
           assert b["projectId"]==a["projectId"]=="project:mpc-pid-system"
           assert b["posture"]=="LOCAL_DETERMINISTIC_CONTROL_AND_SIMULATION"
           assert b["complianceState"]=="MIGRATION_REQUIRED"
@@ -41,5 +41,7 @@ jobs:
           forbidden=set(b["forbidden"])
           assert {"cloud-required-control-loop","drive-or-sheets-as-live-control-authority","ai-owned-controller-truth"} <= forbidden
           assert b["productionAuthority"]=="separate-explicit-release-gate"
-          print("MPC/PID Constitution 1.2 dependency sovereignty: PASS")
+          print("MPC/PID Constitution 1.3 dependency sovereignty: PASS")
           PY
+      - name: Verify B3 source-level inheritance without clearing migrations
+        run: node --test tests/governance/constitution-13-b3-adoption.test.mjs
