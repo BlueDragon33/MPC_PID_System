@@ -340,8 +340,13 @@ npm run build
 
 ## Operational sovereignty
 
-This repository adopts **Universal Constitution 1.2.0** at Blueprint Level **B3**.
+This repository adopts **Universal Constitution 1.3.0** at Blueprint Level **B3**.
 
 PID/MPC control and simulation are **LOCAL_CORE** deterministic capabilities. Cloud/AI/Drive integrations are optional downstream helpers only; they must never enter the live control loop or become canonical controller truth.
 
 Canonical dependency posture: `.blueprint/dependency-budget.json`.
+
+
+## Giới hạn nghiệm thu Blueprint 1.3
+
+Kế thừa chính sách tại nguồn và CI không đồng nghĩa rằng ứng dụng đã được nghiệm thu offline. Hồ sơ kiểm định: `docs/BLUEPRINT-13-MIGRATION-SOURCE-AUDIT.json`; trạng thái các migration blockers hiện giữ `MIGRATION_REQUIRED`. Không publish online từ merge/CI; quyền Production yêu cầu cổng phê duyệt riêng.
