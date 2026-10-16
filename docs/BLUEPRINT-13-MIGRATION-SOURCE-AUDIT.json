@@ -1,0 +1,39 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "application-constitution-source-adoption",
+  "status": "MIGRATION_REQUIRED_SOURCE_CANDIDATE",
+  "projectId": "project:mpc-pid-system",
+  "blueprintLevel": "B3",
+  "baselineSha": "b4525cac913ed74034b9ed842040a0b973590644",
+  "centralPolicy": {
+    "repository": "BlueDragon33/Software-Blueprint-Hub",
+    "version": "1.3.0",
+    "newRatification": false
+  },
+  "sourceScope": [
+    ".blueprint/constitution-adoption.json",
+    ".blueprint/dependency-budget.json",
+    "README.md"
+  ],
+  "existingMigrationBlockersMustRemainAtLeast": 3,
+  "coreLocalDependency": "local-control-runtime",
+  "criticalForbidden": [
+    "cloud-required-control-loop",
+    "drive-or-sheets-as-live-control-authority",
+    "ai-owned-controller-truth"
+  ],
+  "pendingProductEvidence": [
+    "Offline deterministic controller step-response/reference trajectory reproducibility",
+    "Data export and restart restore on real local runner",
+    "Validate hardware/actuator safety boundaries if device connections exist"
+  ],
+  "truth": {
+    "sourceContractReviewOnly": true,
+    "appOfflineRuntime": "UNVERIFIED",
+    "userAcceptance": "UNVERIFIED",
+    "independentReview": "PENDING",
+    "productionAuthorized": false,
+    "mergeIsNotPublish": true,
+    "nativeRuntimeNotTouched": true
+  }
+}
